@@ -61,6 +61,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.continueTrying = True
         self.wanted_conns = []
         self.conns_out = []
+        self._protos = []
+
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -86,6 +88,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     def buildProtocol(self, addr):
         p = self.protocol(Cassandra.Client, self.thriftFactory())
         p.factory = self
+        self._protos.append(p)
         reactor.callLater(0, self.startSubmit, p)
         self.resetDelay()
         return p
@@ -93,6 +96,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     def clientGone(self, proto):
         if proto in self.conns_out:
             self.conns_out.remove(proto)
+        self._protos.remove(proto)
             
     def startSubmit(self, proto):
         if not proto.deferred is None:
@@ -119,4 +123,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         d = defer.Deferred()
         self.stack.append((request, d))
         return d
+    
+    def shutdown(self):
+        self.stopTrying()
+        for p in self._protos:
+            if p.transport:
+                p.transport.loseConnection()
     
