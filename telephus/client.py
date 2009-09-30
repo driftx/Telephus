@@ -11,37 +11,54 @@ class CassandraClient(object):
     def _time(self):
         return int(time.time() * 1000)
     
-    def get(self, key, columnPath, quorum=None):
+    def _getparent(self, columnParentOrCF, super_column=None):
+        if isinstance(columnParentOrCF, str):
+            return ColumnParent(columnParentOrCF, super_column=super_column)
+        else:
+            return columnParentOrCF
+        
+    def _getpath(self, columnPathOrCF, col, super_column=None):
+        if isinstance(columnPathOrCF, str):
+            return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
+        else:
+            return columnPathOrCF
+    
+    def get(self, key, columnPath, column=None, super_column=None, quorum=None):
+        cp = self._getpath(columnPath, column, super_column)
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('get', self.keyspace, key, columnPath, quorum)
+        req = ManagedThriftRequest('get', self.keyspace, key, cp, quorum)
         return self.manager.pushRequest(req)
     
     def get_slice(self, key, columnParent, names=None, start='', finish='',
-                  reverse=False, count=100, quorum=None):
+                  reverse=False, count=100, quorum=None, super_column=None):
+        cp = self._getparent(columnParent, super_column)
         srange = SliceRange(start, finish, reverse, count)
         quorum = quorum or self.quorum
         pred = SlicePredicate(names, srange)
-        req = ManagedThriftRequest('get_slice', self.keyspace, key,
-                columnParent, pred, quorum)
+        req = ManagedThriftRequest('get_slice', self.keyspace, key, cp, pred,
+                                   quorum)
         return self.manager.pushRequest(req)
     
-    def multiget(self, keys, columnPath, quorum=None):
+    def multiget(self, keys, columnPath, column=None, super_column=None, quorum=None):
+        cp = self._getpath(columnPath, column, super_column)
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('multiget', self.keyspace, keys, columnPath, quorum)
+        req = ManagedThriftRequest('multiget', self.keyspace, keys, cp, quorum)
         return self.manager.pushRequest(req)
     
     def multiget_slice(self, keys, columnParent, names=None, start='', finish='',
-                  reverse=False, count=100, quorum=None):
+                  reverse=False, count=100, quorum=None, super_column=None):
+        cp = self._getparent(columnParent, super_column)
         srange = SliceRange(start, finish, reverse, count)
         quorum = quorum or self.quorum
         pred = SlicePredicate(names, srange)
-        req = ManagedThriftRequest('multiget_slice', self.keyspace, keys,
-                columnParent, pred, quorum)
+        req = ManagedThriftRequest('multiget_slice', self.keyspace, keys, cp,
+                                   pred, quorum)
         return self.manager.pushRequest(req)
     
     def get_count(self, key, columnParent, quorum=None):    
+        cp = self._getparent(columnParent)
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('get_count', self.keyspace, key, columnParent,
+        req = ManagedThriftRequest('get_count', self.keyspace, key, cp,
                                    quorum)
         return self.manager.pushRequest(req)
     
@@ -51,18 +68,22 @@ class CassandraClient(object):
                                    limit, quorum)
         return self.manager.pushRequest(req)
 
-    def insert(self, key, columnPath, value, timestamp=None, quorum=None):
+    def insert(self, key, columnPath, value, column=None, super_column=None,
+               timestamp=None, quorum=None):
         timestamp = timestamp or self._time()
+        cp = self._getpath(columnPath, column, super_column)
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('insert', self.keyspace, key,
-                columnPath, value, timestamp, quorum)
+        req = ManagedThriftRequest('insert', self.keyspace, key, cp, value,
+                                   timestamp, quorum)
         return self.manager.pushRequest(req)
 
-    def remove(self, key, columnPath, timestamp=None, quorum=None):
+    def remove(self, key, columnPath, column=None, super_column=None, 
+               timestamp=None, quorum=None):
+        cp = self._getpath(columnPath, column, super_column)
         timestamp = timestamp or self._time()
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('remove', self.keyspace, key,
-                columnPath, timestamp, self.quorum)
+        req = ManagedThriftRequest('remove', self.keyspace, key, cp,
+                                   timestamp, self.quorum)
         return self.manager.pushRequest(req)
 
     def batch_insert(self, key, columnFamily, mapping, quorum=None):

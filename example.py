@@ -6,25 +6,33 @@ from twisted.internet import defer
 
 HOST = 'localhost'
 PORT = 9160
-KEYSPACE = 'MyKeyspace'
-CF = 'MyColumnFamily'
-SCF = 'MySuperColumnFamily'
+KEYSPACE = 'Keyspace1'
+CF = 'Standard1'
+SCF = 'Super1'
 colname = 'foo'
+scname = 'bar'
 
 @defer.inlineCallbacks
 def dostuff(client):
+    # you can pass ttypes objects directly
     yield client.insert('test', ColumnPath(CF, None, colname), 'testval')
-    yield client.insert('test2', ColumnPath(CF, None, colname), 'testval')
-    res = yield client.get('test', ColumnPath(CF, None, colname))
+    # or not
+    yield client.insert('test2', CF, 'testval', column=colname)
+    yield client.insert('test', SCF, 'testval', column=colname, super_column=scname)
+    res = yield client.get('test', CF, column=colname)
     print 'get', res
-    res = yield client.get_slice('test', ColumnParent(CF))
+    res = yield client.get('test', SCF, column=colname, super_column=scname)
+    print 'get (super)', res
+    res = yield client.get_slice('test', CF)
     print 'get_slice', res
-    res = yield client.multiget(['test', 'test2'], ColumnPath(CF, None, colname))
+    res = yield client.multiget(['test', 'test2'], CF, column=colname)
     print 'multiget', res
-    res = yield client.multiget_slice(['test', 'test2'], ColumnParent(CF))
+    res = yield client.multiget_slice(['test', 'test2'], CF)
     print 'multiget_slice', res
-    res = yield client.get_count('test', ColumnParent(CF))
+    res = yield client.get_count('test', CF)
     print 'get_count', res
+    # batch insert will figure out if you're trying a CF or SCF
+    # from the data structure
     res = yield client.batch_insert('test', CF, {colname: 'bar'})
     print "batch_insert", res
     res = yield client.batch_insert('test', SCF, {'foo': {colname: 'bar'}})
