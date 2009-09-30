@@ -52,6 +52,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
+    submitLoopSleep = 1
 
     def __init__(self):
         self.client = None
@@ -107,8 +108,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             return
         try:
             request, deferred = self.stack.popleft()
-        except:
-            reactor.callLater(1, self.startSubmit, proto)
+        except IndexError:
+            reactor.callLater(self.submitLoopSleep, self.startSubmit, proto)
             return
 
         d = proto.submitRequest(request)
