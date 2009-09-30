@@ -92,3 +92,15 @@ class CassandraClient(object):
         cfmap = {columnFamily: supers}
         req = ManagedThriftRequest('batch_insert', self.keyspace, key, cfmap, quorum)
         return self.manager.pushRequest(req)
+
+    def get_string_property(self, name):
+        req = ManagedThriftRequest('get_string_property', name)
+        return self.manager.pushRequest(req)
+
+    def get_string_list_property(self, name):
+        req = ManagedThriftRequest('get_string_list_property', name)
+        return self.manager.pushRequest(req)
+
+    def describe_keyspace(self, keyspace):
+        req = ManagedThriftRequest('describe_keyspace', keyspace)
+        return self.manager.pushRequest(req)
