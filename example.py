@@ -39,6 +39,6 @@ if __name__ == '__main__':
 
     f = ManagedCassandraClientFactory()
     c = CassandraClient(f, KEYSPACE)
-    testem(c)
+    dostuff(c)
     reactor.connectTCP(HOST, PORT, f)
     reactor.run()
