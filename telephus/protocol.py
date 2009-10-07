@@ -55,7 +55,6 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     submitLoopSleep = 1
 
     def __init__(self):
-        self.client = None
         self.stack      = collections.deque()
         self.deferred   = defer.Deferred()
         self.continueTrying = True
@@ -73,6 +72,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         if self.deferred:
             self.deferred.callback(value)
             self.deferred = None
+            
+    def clientConnectionFailed(self, connector, reason):
+        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+        self._errback(reason)
 
     def getConnection(self):
         d = defer.Deferred()
