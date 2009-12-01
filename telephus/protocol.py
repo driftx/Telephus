@@ -2,8 +2,8 @@ from thrift.transport import TTwisted
 from thrift.protocol import TBinaryProtocol
 from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
+from twisted.internet.error import UserError
 from telephus.cassandra import Cassandra
-import collections
 
 class ClientBusy(Exception):
     pass
@@ -27,7 +27,10 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.factory.clientIdle(self)
         
     def connectionLost(self, reason=None):
-        TTwisted.ThriftClientProtocol.connectionLost(self, reason)
+        try:
+            TTwisted.ThriftClientProtocol.connectionLost(self, reason)
+        except RuntimeError:
+            pass
         self.factory.clientGone(self)
         
     def _complete(self, res=None):
@@ -52,16 +55,13 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
-    submitLoopSleep = 1
 
     def __init__(self):
-        self.stack      = collections.deque()
         self.deferred   = defer.Deferred()
+        self.queue = defer.DeferredQueue()
         self.continueTrying = True
-        self.wanted_conns = []
-        self.conns_out = []
         self._protos = []
-
+        self._pending = []
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -77,54 +77,36 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
         self._errback(reason)
 
-    def getConnection(self):
-        d = defer.Deferred()
-        self.wanted_conns.append(d)
-        return d
-
     def clientIdle(self, proto):
-        if proto in self.conns_out:
-            self.conns_out.remove(proto)
-        self.startSubmit(proto)
+        if proto not in self._protos:
+            self._protos.append(proto)
+        self.submitRequest(proto)
         self._callback(True)
 
     def buildProtocol(self, addr):
         p = self.protocol(Cassandra.Client, self.thriftFactory())
         p.factory = self
-        self._protos.append(p)
-        reactor.callLater(0, self.startSubmit, p)
         self.resetDelay()
         return p
 
     def clientGone(self, proto):
-        if proto in self.conns_out:
-            self.conns_out.remove(proto)
         self._protos.remove(proto)
             
-    def startSubmit(self, proto):
-        if not proto.deferred is None:
-            return
-        if not proto.started.called:
-            return
-        if proto in self.conns_out:
-            return
-        if self.wanted_conns:
-            d = self.wanted_conns.pop(0)
-            self.conns_out.append(proto)
-            d.callback(proto)
-            return
-        try:
-            request, deferred = self.stack.popleft()
-        except IndexError:
-            reactor.callLater(self.submitLoopSleep, self.startSubmit, proto)
-            return
-
-        d = proto.submitRequest(request)
-        d.addCallbacks(deferred.callback, deferred.errback)
+    @defer.inlineCallbacks
+    def submitRequest(self, proto):
+        request, deferred = yield self.queue.get()
+        if not proto in self._protos:
+            # may have disconnected while we were waiting for a request
+            self.queue.put((request, deferred))
+        else:
+            self._pending.remove(deferred)
+            d = proto.submitRequest(request)
+            d.addCallbacks(deferred.callback, deferred.errback)
         
     def pushRequest(self, request):
         d = defer.Deferred()
-        self.stack.append((request, d))
+        self._pending.append(d)
+        self.queue.put((request, d))
         return d
     
     def shutdown(self):
@@ -132,4 +114,6 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         for p in self._protos:
             if p.transport:
                 p.transport.loseConnection()
+        for d in self._pending:
+            d.errback(UserError(string="Shutdown requested"))
     
