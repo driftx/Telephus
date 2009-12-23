@@ -62,10 +62,21 @@ class CassandraClient(object):
                                    quorum)
         return self.manager.pushRequest(req)
     
-    def get_key_range(self, start='', end='', limit=1000, quorum=None):
+    def get_key_range(self, columnParent, start='', finish='', count=100,
+                    reverse=False, quorum=None):
         quorum = quorum or self.quorum
-        req = ManagedThriftRequest('get_key_range', self.keyspace, start, end,
-                                   limit, quorum)
+        return self.get_range_slice(columnParent, start=start, finish=finish,
+                                    count=count, quorum=quorum, reverse=reverse)
+    
+    def get_range_slice(self, columnParent, start='', finish='', column_start='',
+            column_finish='', names=None, count=100, reverse=False, quorum=None,
+            super_column=None):
+        cp = self._getparent(columnParent, super_column)
+        quorum = quorum or self.quorum
+        srange = SliceRange(column_start, column_finish, reverse, count)
+        pred = SlicePredicate(names, srange)
+        req = ManagedThriftRequest('get_range_slice', self.keyspace, cp, pred,
+                                   start, finish, count, quorum)
         return self.manager.pushRequest(req)
 
     def insert(self, key, columnPath, value, column=None, super_column=None,
