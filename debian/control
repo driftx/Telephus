@@ -1,0 +1,16 @@
+Source: python-telephus
+Section: python
+Priority: optional
+Maintainer: Brandon Williams <brandon@faltering.com>
+Build-Depends-Indep: debhelper (>= 5.0.37.2), python-support (>= 0.5.6)
+Standards-Version: 3.7.2
+
+Package: python-telephus
+Architecture: all
+Depends: ${python:Depends}, python-twisted(>= 8.1.0), python-thrift(>= 0~svn090324-1)
+Provides: ${python:Provides}
+Description: twisted python client library for Cassandra
+ Telephus is a connection pooled, low-level client API for Cassandra in Twisted
+ python.
+ .
+  Homepage: http://github.com/driftx/Telephus
