@@ -86,34 +86,41 @@ class CassandraClient(object):
                                    timestamp, self.quorum)
         return self.manager.pushRequest(req)
 
-    def batch_insert(self, key, columnFamily, mapping, quorum=None):
-        first = mapping.keys()[0]
-        if isinstance(mapping[first], dict):
-            return self._batch_insert_super(key, columnFamily, mapping, quorum)
-        else:
-            return self._batch_insert_column(key, columnFamily, mapping, quorum)
-        
-    def _batch_insert_column(self, key, columnFamily, mapping, quorum=None):
+    def batch_insert(self, key, columnFamily, mapping, timestamp=None, quorum=None):
+        if isinstance(mapping, list) and timestamp is not None:
+            raise RuntimeError('Timestamp cannot be specified with a list of Columns/SuperColumns')
+        timestamp = timestamp or self._time()
         quorum = quorum or self.quorum
+        colsorsupers = self._mk_cols_or_supers(mapping, timestamp)
         cols = []
-        for col,val in mapping.iteritems():
-            cols.append(ColumnOrSuperColumn(column=Column(col, val, self._time())))
+        for c in colsorsupers:
+            if isinstance(c, SuperColumn):
+                cols.append(ColumnOrSuperColumn(super_column=c))
+            else:
+                cols.append(ColumnOrSuperColumn(column=c))
         cfmap = {columnFamily: cols}
         req = ManagedThriftRequest('batch_insert', self.keyspace, key, cfmap, quorum)
         return self.manager.pushRequest(req)
-    
-    def _batch_insert_super(self, key, columnFamily, mapping, quorum=None):
-        quorum = quorum or self.quorum
-        supers = []
-        for name in mapping:
-            cols = []
-            for col,val in mapping[name].iteritems():
-                cols.append(Column(col, val, self._time()))
-            supers.append(ColumnOrSuperColumn(super_column=SuperColumn(name=name, columns=cols)))
-        cfmap = {columnFamily: supers}
-        req = ManagedThriftRequest('batch_insert', self.keyspace, key, cfmap, quorum)
-        return self.manager.pushRequest(req)
-
+            
+    def _mk_cols_or_supers(self, mapping, timestamp):
+        if isinstance(mapping, list):
+            return mapping
+        colsorsupers = []
+        if isinstance(mapping, dict):
+            first = mapping.keys()[0]
+            if isinstance(mapping[first], dict):
+                for name in mapping:
+                    cols = []
+                    for col,val in mapping[name].iteritems():
+                        cols.append(Column(col, val, timestamp))
+                    colsorsupers.append(SuperColumn(name=name, columns=cols))
+            else:
+                for col,val in mapping.iteritems():
+                    colsorsupers.append(Column(col, val, timestamp))
+        else:
+            raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
+        return colsorsupers
+        
     def get_string_property(self, name):
         req = ManagedThriftRequest('get_string_property', name)
         return self.manager.pushRequest(req)

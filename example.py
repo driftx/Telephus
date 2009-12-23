@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from telephus.protocol import ManagedCassandraClientFactory
 from telephus.client import CassandraClient
-from telephus.cassandra.ttypes import ColumnPath, ColumnParent
+from telephus.cassandra.ttypes import ColumnPath, ColumnParent, Column, SuperColumn
 from twisted.internet import defer
 
 HOST = 'localhost'
@@ -37,6 +37,15 @@ def dostuff(client):
     print "batch_insert", res
     res = yield client.batch_insert('test', SCF, {'foo': {colname: 'bar'}})
     print "batch_insert", res
+    # with ttypes, you pass a list as you would for raw thrift
+    # this way you can set custom timestamps
+    cols = [Column(colname, 'bar', 1234), Column('bar', 'baz', 54321)]
+    res = yield client.batch_insert('test', CF, cols)
+    print "batch_insert", res
+    cols = [SuperColumn(name=colname, columns=cols)]
+    res = yield client.batch_insert('test', SCF, cols)
+    print "batch_insert", res
+
 
 
 if __name__ == '__main__':
