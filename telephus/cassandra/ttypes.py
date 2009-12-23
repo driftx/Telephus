@@ -15,13 +15,45 @@ except:
 
 
 class ConsistencyLevel:
+  """
+  The ConsistencyLevel is an enum that controls both read and write behavior based on <ReplicationFactor> in your
+  storage-conf.xml. The different consistency levels have different meanings, depending on if you're doing a write or read
+  operation. Note that if W + R > ReplicationFactor, where W is the number of nodes to block for on write, and R
+  the number to block for on reads, you will have strongly consistent behavior; that is, readers will always see the most
+  recent write. Of these, the most interesting is to do QUORUM reads and writes, which gives you consistency while still
+  allowing availability in the face of node failures up to half of <ReplicationFactor>. Of course if latency is more
+  important than consistency then you can use lower values for either or both.
+  
+  Write:
+       ZERO    Ensure nothing. A write happens asynchronously in background
+       ONE     Ensure that the write has been written to at least 1 node's commit log and memory table before responding to the client.
+       QUORUM  Ensure that the write has been written to <ReplicationFactor> / 2 + 1 nodes before responding to the client.
+       ALL     Ensure that the write is written to <code>&lt;ReplicationFactor&gt;</code> nodes before responding to the client.
+  
+  Read:
+       ZERO    Not supported, because it doesn't make sense.
+       ONE     Will return the record returned by the first node to respond. A consistency check is always done in a
+               background thread to fix any consistency issues when ConsistencyLevel.ONE is used. This means subsequent
+               calls will have correct data even if the initial read gets an older value. (This is called 'read repair'.)
+       QUORUM  Will query all storage nodes and return the record with the most recent timestamp once it has at least a
+               majority of replicas reported. Again, the remaining replicas will be checked in the background.
+       ALL     Not yet supported, but we plan to eventually.
+  """
   ZERO = 0
   ONE = 1
   QUORUM = 2
-  ALL = 3
+  DCQUORUM = 3
+  DCQUORUMSYNC = 4
+  ALL = 5
 
 class Column:
   """
+  Basic unit of data within a ColumnFamily.
+  @param name. A column name can act both as structure (a label) or as data (like value). Regardless, the name of the column
+         is used as a key to its value.
+  @param value. Some data
+  @param timestamp. Used to record when data was sent to be written.
+  
   Attributes:
    - name
    - value
@@ -102,6 +134,11 @@ class Column:
 
 class SuperColumn:
   """
+  A named list of columns.
+  @param name. see Column.name.
+  @param columns. A collection of standard Columns.  The columns within a super column are defined in an adhoc manner.
+                  Columns within a super column do not have to have matching structures (similarly named child columns).
+  
   Attributes:
    - name
    - columns
@@ -179,6 +216,15 @@ class SuperColumn:
 
 class ColumnOrSuperColumn:
   """
+  Methods for fetching rows/records from Cassandra will return either a single instance of ColumnOrSuperColumn or a list
+  of ColumnOrSuperColumns (get_slice()). If you're looking up a SuperColumn (or list of SuperColumns) then the resulting
+  instances of ColumnOrSuperColumn will have the requested SuperColumn in the attribute super_column. For queries resulting
+  in Columns, those values will be in the attribute column. This change was made between 0.3 and 0.4 to standardize on
+  single query methods that may return either a SuperColumn or Column.
+  
+  @param column. The Column returned by get() or get_slice().
+  @param super_column. The SuperColumn returned by get() or get_slice().
+  
   Attributes:
    - column
    - super_column
@@ -248,6 +294,9 @@ class ColumnOrSuperColumn:
     return not (self == other)
 
 class NotFoundException(Exception):
+  """
+  A specific column was requested that does not exist.
+  """
 
   thrift_spec = (
   )
@@ -290,6 +339,9 @@ class NotFoundException(Exception):
 
 class InvalidRequestException(Exception):
   """
+  Invalid request could mean keyspace or column family does not exist, required parameters are missing, or a parameter is malformed.
+  why contains an associated error message.
+  
   Attributes:
    - why
   """
@@ -348,6 +400,9 @@ class InvalidRequestException(Exception):
     return not (self == other)
 
 class UnavailableException(Exception):
+  """
+  Not all the replicas required could be created and/or read.
+  """
 
   thrift_spec = (
   )
@@ -388,8 +443,57 @@ class UnavailableException(Exception):
   def __ne__(self, other):
     return not (self == other)
 
+class TimedOutException(Exception):
+  """
+  RPC timeout was exceeded.  either a node failed mid-operation, or load was too high, or the requested op was too large.
+  """
+
+  thrift_spec = (
+  )
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('TimedOutException')
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __str__(self):
+    return repr(self)
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
 class ColumnParent:
   """
+  ColumnParent is used when selecting groups of columns from the same ColumnFamily. In directory structure terms, imagine
+  ColumnParent as ColumnPath + '/../'.
+  
+  See also <a href="cassandra.html#Struct_ColumnPath">ColumnPath</a>
+  
   Attributes:
    - column_family
    - super_column
@@ -460,6 +564,15 @@ class ColumnParent:
 
 class ColumnPath:
   """
+  The ColumnPath is the path to a single column in Cassandra. It might make sense to think of ColumnPath and
+  ColumnParent in terms of a directory structure.
+  
+  ColumnPath is used to looking up a single column.
+  
+  @param column_family. The name of the CF of the column being looked up.
+  @param super_column. The super column name.
+  @param column. The column name.
+  
   Attributes:
    - column_family
    - super_column
@@ -542,6 +655,21 @@ class ColumnPath:
 
 class SliceRange:
   """
+  A slice range is a structure that stores basic range, ordering and limit information for a query that will return
+  multiple columns. It could be thought of as Cassandra's version of LIMIT and ORDER BY
+  
+  @param start. The column name to start the slice with. This attribute is not required, though there is no default value,
+                and can be safely set to '', i.e., an empty byte array, to start with the first column name. Otherwise, it
+                must a valid value under the rules of the Comparator defined for the given ColumnFamily.
+  @param finish. The column name to stop the slice at. This attribute is not required, though there is no default value,
+                 and can be safely set to an empty byte array to not stop until 'count' results are seen. Otherwise, it
+                 must also be a value value to the ColumnFamily Comparator.
+  @param reversed. Whether the results should be ordered in reversed order. Similar to ORDER BY blah DESC in SQL.
+  @param count. How many keys to return. Similar to LIMIT 100 in SQL. May be arbitrarily large, but Thrift will
+                materialize the whole result into memory before returning it to the client, so be aware that you may
+                be better served by iterating through slices by passing the last value of one call in as the 'start'
+                of the next instead of increasing 'count' arbitrarily large.
+  
   Attributes:
    - start
    - finish
@@ -634,6 +762,17 @@ class SliceRange:
 
 class SlicePredicate:
   """
+  A SlicePredicate is similar to a mathematic predicate (see http://en.wikipedia.org/wiki/Predicate_(mathematical_logic)),
+  which is described as "a property that the elements of a set have in common."
+  
+  SlicePredicate's in Cassandra are described with either a list of column_names or a SliceRange.  If column_names is
+  specified, slice_range is ignored.
+  
+  @param column_name. A list of column names to retrieve. This can be used similar to Memcached's "multi-get" feature
+                      to fetch N known column names. For instance, if you know you wish to fetch columns 'Joe', 'Jack',
+                      and 'Jim' you can pass those column names as a list to fetch all three at once.
+  @param slice_range. A SliceRange describing how to range, order, and/or limit the slice.
+  
   Attributes:
    - column_names
    - slice_range
@@ -694,6 +833,244 @@ class SlicePredicate:
     if self.slice_range != None:
       oprot.writeFieldBegin('slice_range', TType.STRUCT, 2)
       self.slice_range.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class KeySlice:
+  """
+  A KeySlice is key followed by the data it maps to. A collection of KeySlice is returned by the get_range_slice operation.
+  
+  @param key. a row key
+  @param columns. List of data represented by the key. Typically, the list is pared down to only the columns specified by
+                  a SlicePredicate.
+  
+  Attributes:
+   - key
+   - columns
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRING, 'key', None, None, ), # 1
+    (2, TType.LIST, 'columns', (TType.STRUCT,(ColumnOrSuperColumn, ColumnOrSuperColumn.thrift_spec)), None, ), # 2
+  )
+
+  def __init__(self, key=None, columns=None,):
+    self.key = key
+    self.columns = columns
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRING:
+          self.key = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.LIST:
+          self.columns = []
+          (_etype17, _size14) = iprot.readListBegin()
+          for _i18 in xrange(_size14):
+            _elem19 = ColumnOrSuperColumn()
+            _elem19.read(iprot)
+            self.columns.append(_elem19)
+          iprot.readListEnd()
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('KeySlice')
+    if self.key != None:
+      oprot.writeFieldBegin('key', TType.STRING, 1)
+      oprot.writeString(self.key)
+      oprot.writeFieldEnd()
+    if self.columns != None:
+      oprot.writeFieldBegin('columns', TType.LIST, 2)
+      oprot.writeListBegin(TType.STRUCT, len(self.columns))
+      for iter20 in self.columns:
+        iter20.write(oprot)
+      oprot.writeListEnd()
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class Deletion:
+  """
+  Attributes:
+   - timestamp
+   - super_column
+   - predicate
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.I64, 'timestamp', None, None, ), # 1
+    (2, TType.STRING, 'super_column', None, None, ), # 2
+    (3, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 3
+  )
+
+  def __init__(self, timestamp=None, super_column=None, predicate=None,):
+    self.timestamp = timestamp
+    self.super_column = super_column
+    self.predicate = predicate
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.I64:
+          self.timestamp = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.STRING:
+          self.super_column = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 3:
+        if ftype == TType.STRUCT:
+          self.predicate = SlicePredicate()
+          self.predicate.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('Deletion')
+    if self.timestamp != None:
+      oprot.writeFieldBegin('timestamp', TType.I64, 1)
+      oprot.writeI64(self.timestamp)
+      oprot.writeFieldEnd()
+    if self.super_column != None:
+      oprot.writeFieldBegin('super_column', TType.STRING, 2)
+      oprot.writeString(self.super_column)
+      oprot.writeFieldEnd()
+    if self.predicate != None:
+      oprot.writeFieldBegin('predicate', TType.STRUCT, 3)
+      self.predicate.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class Mutation:
+  """
+  A Mutation is either an insert, represented by filling column_or_supercolumn, or a deletion, represented by filling the deletion attribute.
+  @param column_or_supercolumn. An insert to a column or supercolumn
+  @param deletion. A deletion of a column or supercolumn
+  
+  Attributes:
+   - column_or_supercolumn
+   - deletion
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'column_or_supercolumn', (ColumnOrSuperColumn, ColumnOrSuperColumn.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'deletion', (Deletion, Deletion.thrift_spec), None, ), # 2
+  )
+
+  def __init__(self, column_or_supercolumn=None, deletion=None,):
+    self.column_or_supercolumn = column_or_supercolumn
+    self.deletion = deletion
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.column_or_supercolumn = ColumnOrSuperColumn()
+          self.column_or_supercolumn.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.STRUCT:
+          self.deletion = Deletion()
+          self.deletion.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('Mutation')
+    if self.column_or_supercolumn != None:
+      oprot.writeFieldBegin('column_or_supercolumn', TType.STRUCT, 1)
+      self.column_or_supercolumn.write(oprot)
+      oprot.writeFieldEnd()
+    if self.deletion != None:
+      oprot.writeFieldBegin('deletion', TType.STRUCT, 2)
+      self.deletion.write(oprot)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()

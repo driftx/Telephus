@@ -27,9 +27,11 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print '   multiget_slice(string keyspace,  keys, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)'
   print '  i32 get_count(string keyspace, string key, ColumnParent column_parent, ConsistencyLevel consistency_level)'
   print '   get_key_range(string keyspace, string column_family, string start, string finish, i32 count, ConsistencyLevel consistency_level)'
+  print '   get_range_slice(string keyspace, ColumnParent column_parent, SlicePredicate predicate, string start_key, string finish_key, i32 row_count, ConsistencyLevel consistency_level)'
   print '  void insert(string keyspace, string key, ColumnPath column_path, string value, i64 timestamp, ConsistencyLevel consistency_level)'
   print '  void batch_insert(string keyspace, string key,  cfmap, ConsistencyLevel consistency_level)'
   print '  void remove(string keyspace, string key, ColumnPath column_path, i64 timestamp, ConsistencyLevel consistency_level)'
+  print '  void batch_mutate(string keyspace,  mutation_map, ConsistencyLevel consistency_level)'
   print '  string get_string_property(string property)'
   print '   get_string_list_property(string property)'
   print '   describe_keyspace(string keyspace)'
@@ -117,6 +119,12 @@ elif cmd == 'get_key_range':
     sys.exit(1)
   pp.pprint(client.get_key_range(args[0],args[1],args[2],args[3],eval(args[4]),eval(args[5]),))
 
+elif cmd == 'get_range_slice':
+  if len(args) != 7:
+    print 'get_range_slice requires 7 args'
+    sys.exit(1)
+  pp.pprint(client.get_range_slice(args[0],eval(args[1]),eval(args[2]),args[3],args[4],eval(args[5]),eval(args[6]),))
+
 elif cmd == 'insert':
   if len(args) != 6:
     print 'insert requires 6 args'
@@ -134,6 +142,12 @@ elif cmd == 'remove':
     print 'remove requires 5 args'
     sys.exit(1)
   pp.pprint(client.remove(args[0],args[1],eval(args[2]),eval(args[3]),eval(args[4]),))
+
+elif cmd == 'batch_mutate':
+  if len(args) != 3:
+    print 'batch_mutate requires 3 args'
+    sys.exit(1)
+  pp.pprint(client.batch_mutate(args[0],eval(args[1]),eval(args[2]),))
 
 elif cmd == 'get_string_property':
   if len(args) != 1:

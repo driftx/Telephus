@@ -7,3 +7,5 @@
 from thrift.Thrift import *
 from ttypes import *
 
+VERSION = "0.5-beta2"
+
