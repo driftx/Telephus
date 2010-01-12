@@ -21,10 +21,7 @@ build-stamp:
 	dh_installdirs
 	
 	set -e; \
-	for PY in $(PYVERS); \
-	do \
-	    $$PY setup.py install --root $(CURDIR)/debian/python-telephus; \
-	done
+	    python setup.py install --root $(CURDIR)/debian/python-telephus
 	
 	touch build-stamp
 
