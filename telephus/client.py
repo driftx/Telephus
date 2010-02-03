@@ -32,10 +32,10 @@ class CassandraClient(object):
     def get_slice(self, key, columnParent, names=None, start='', finish='',
                   reverse=False, count=100, quorum=None, super_column=None):
         cp = self._getparent(columnParent, super_column)
-        if any([start, finish, reverse]):
-            srange = SliceRange(start, finish, reverse, count)
-        else:
+        if names:
             srange = None
+        else:
+            srange = SliceRange(start, finish, reverse, count)
         quorum = quorum or self.quorum
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('get_slice', self.keyspace, key, cp, pred,
@@ -51,10 +51,10 @@ class CassandraClient(object):
     def multiget_slice(self, keys, columnParent, names=None, start='', finish='',
                   reverse=False, count=100, quorum=None, super_column=None):
         cp = self._getparent(columnParent, super_column)
-        if any([start, finish, reverse]):
-            srange = SliceRange(start, finish, reverse, count)
-        else:
+        if names:
             srange = None
+        else:
+            srange = SliceRange(start, finish, reverse, count)
         quorum = quorum or self.quorum
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('multiget_slice', self.keyspace, keys, cp,
@@ -79,10 +79,10 @@ class CassandraClient(object):
             super_column=None):
         cp = self._getparent(columnParent, super_column)
         quorum = quorum or self.quorum
-        if any([column_start, column_finish, reverse]):
-            srange = SliceRange(column_start, column_finish, reverse, count)
-        else:
+        if names:
             srange = None
+        else:
+            srange = SliceRange(column_start, column_finish, reverse, count)
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('get_range_slice', self.keyspace, cp, pred,
                                    start, finish, count, quorum)
