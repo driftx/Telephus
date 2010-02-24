@@ -24,14 +24,16 @@ class CassandraClient(object):
         else:
             return columnPathOrCF
     
-    def get(self, key, columnPath, column=None, super_column=None, consistency=None):
+    def get(self, key, columnPath, column=None, super_column=None, consistency=None,
+            retries=None):
         cp = self._getpath(columnPath, column, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('get', self.keyspace, key, cp, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
     def get_slice(self, key, columnParent, names=None, start='', finish='',
-                  reverse=False, count=100, consistency=None, super_column=None):
+                  reverse=False, count=100, consistency=None, super_column=None,
+                  retries=None):
         cp = self._getparent(columnParent, super_column)
         if names:
             srange = None
@@ -41,16 +43,18 @@ class CassandraClient(object):
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('get_slice', self.keyspace, key, cp, pred,
                                    consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
-    def multiget(self, keys, columnPath, column=None, super_column=None, consistency=None):
+    def multiget(self, keys, columnPath, column=None, super_column=None,
+                 consistency=None, retries=None):
         cp = self._getpath(columnPath, column, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('multiget', self.keyspace, keys, cp, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
     def multiget_slice(self, keys, columnParent, names=None, start='', finish='',
-                  reverse=False, count=100, consistency=None, super_column=None):
+                  reverse=False, count=100, consistency=None, super_column=None,
+                  retries=None):
         cp = self._getparent(columnParent, super_column)
         if names:
             srange = None
@@ -60,25 +64,27 @@ class CassandraClient(object):
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('multiget_slice', self.keyspace, keys, cp,
                                    pred, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
-    def get_count(self, key, columnParent, consistency=None):    
+    def get_count(self, key, columnParent, consistency=None, retries=None):    
         cp = self._getparent(columnParent)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('get_count', self.keyspace, key, cp,
                                    consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
     def get_key_range(self, columnParent, start='', finish='', count=100,
-                    column_count=100, reverse=False, consistency=None):
+                    column_count=100, reverse=False, consistency=None,
+                    retries=None):
         consistency = consistency or self.consistency
         return self.get_range_slice(columnParent, start=start, finish=finish,
                                     count=count, column_count=column_count,
-                                    consistency=consistency, reverse=reverse)
+                                    consistency=consistency, reverse=reverse,
+                                    retries=retries)
     
     def get_range_slice(self, columnParent, start='', finish='', column_start='',
             column_finish='', names=None, count=100, column_count=100, 
-            reverse=False, consistency=None, super_column=None):
+            reverse=False, consistency=None, super_column=None, retries=None):
         cp = self._getparent(columnParent, super_column)
         consistency = consistency or self.consistency
         if names:
@@ -88,36 +94,39 @@ class CassandraClient(object):
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('get_range_slice', self.keyspace, cp, pred,
                                    start, finish, count, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
 
     def insert(self, key, columnPath, value, column=None, super_column=None,
-               timestamp=None, consistency=None):
+               timestamp=None, consistency=None, retries=None):
         timestamp = timestamp or self._time()
         cp = self._getpath(columnPath, column, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('insert', self.keyspace, key, cp, value,
                                    timestamp, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
 
     def remove(self, key, columnPath, column=None, super_column=None, 
-               timestamp=None, consistency=None):
+               timestamp=None, consistency=None, retries=None):
         cp = self._getpath(columnPath, column, super_column)
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('remove', self.keyspace, key, cp,
                                    timestamp, self.consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
 
-    def batch_insert(self, key, columnFamily, mapping, timestamp=None, consistency=None):
+    def batch_insert(self, key, columnFamily, mapping, timestamp=None,
+                     consistency=None, retries=None):
         if isinstance(mapping, list) and timestamp is not None:
             raise RuntimeError('Timestamp cannot be specified with a list of Mutations')
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = {key: {columnFamily: self._mk_cols_or_supers(mapping, timestamp)}}
-        return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency)
+        return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency,
+                                 retries=retries)
     
     def batch_remove(self, cfmap, start='', finish='', count=100, names=None,
-                     reverse=False, consistency=None, timestamp=None, supercolumn=None):
+                     reverse=False, consistency=None, timestamp=None, supercolumn=None,
+                     retries=None):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
@@ -130,9 +139,9 @@ class CassandraClient(object):
             for key in keys:
                 mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp, supercolumn, pred))]
         req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
     
-    def batch_mutate(self, mutationmap, timestamp=None, consistency=None):
+    def batch_mutate(self, mutationmap, timestamp=None, consistency=None, retries=None):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
@@ -149,7 +158,7 @@ class CassandraClient(object):
                         muts.append(c)
                 mutmap[key][cf] = muts
         req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
         
     def _mk_cols_or_supers(self, mapping, timestamp):
         if isinstance(mapping, list):
@@ -170,14 +179,14 @@ class CassandraClient(object):
             raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
         return colsorsupers
         
-    def get_string_property(self, name):
+    def get_string_property(self, name, retries=None):
         req = ManagedThriftRequest('get_string_property', name)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
 
-    def get_string_list_property(self, name):
+    def get_string_list_property(self, name, retries=None):
         req = ManagedThriftRequest('get_string_list_property', name)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)
 
-    def describe_keyspace(self, keyspace):
+    def describe_keyspace(self, keyspace, retries=None):
         req = ManagedThriftRequest('describe_keyspace', keyspace)
-        return self.manager.pushRequest(req)
+        return self.manager.pushRequest(req, retries=retries)

@@ -56,12 +56,13 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self):
+    def __init__(self, retries=0):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
         self._protos = []
         self._pending = []
+        self.request_retries = retries
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -94,19 +95,30 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             
     @defer.inlineCallbacks
     def submitRequest(self, proto):
-        request, deferred = yield self.queue.get()
+        def reqError(err, req, d, r):
+            if r < 1:
+                d.errback(err)
+                self._pending.remove(d)
+            else:
+                self.queue.put((req, d, r))
+        def reqSuccess(res, d):
+            d.callback(res)
+            self._pending.remove(d)
+        request, deferred, retries = yield self.queue.get()
         if not proto in self._protos:
             # may have disconnected while we were waiting for a request
-            self.queue.put((request, deferred))
+            self.queue.put((request, deferred, retries))
         else:
-            self._pending.remove(deferred)
             d = proto.submitRequest(request)
-            d.addCallbacks(deferred.callback, deferred.errback)
+            retries -= 1
+            d.addErrback(reqError, request, deferred, retries)
+            d.addCallback(reqSuccess, deferred)
         
-    def pushRequest(self, request):
+    def pushRequest(self, request, retries=None):
+        retries = retries or self.request_retries
         d = defer.Deferred()
         self._pending.append(d)
-        self.queue.put((request, d))
+        self.queue.put((request, d, retries))
         return d
     
     def shutdown(self):
@@ -115,5 +127,5 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             if p.transport:
                 p.transport.loseConnection()
         for d in self._pending:
-            d.errback(UserError(string="Shutdown requested"))
+            if not d.called: d.errback(UserError(string="Shutdown requested"))
     
