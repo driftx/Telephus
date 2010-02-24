@@ -69,10 +69,11 @@ class CassandraClient(object):
         return self.manager.pushRequest(req)
     
     def get_key_range(self, columnParent, start='', finish='', count=100,
-                    reverse=False, consistency=None):
+                    column_count=100, reverse=False, consistency=None):
         consistency = consistency or self.consistency
         return self.get_range_slice(columnParent, start=start, finish=finish,
-                                    count=count, consistency=consistency, reverse=reverse)
+                                    count=count, column_count=column_count,
+                                    consistency=consistency, reverse=reverse)
     
     def get_range_slice(self, columnParent, start='', finish='', column_start='',
             column_finish='', names=None, count=100, column_count=100, 
@@ -82,7 +83,7 @@ class CassandraClient(object):
         if names:
             srange = None
         else:
-            srange = SliceRange(column_start, column_finish, reverse, count)
+            srange = SliceRange(column_start, column_finish, reverse, column_count)
         pred = SlicePredicate(names, srange)
         req = ManagedThriftRequest('get_range_slice', self.keyspace, cp, pred,
                                    start, finish, count, consistency)
