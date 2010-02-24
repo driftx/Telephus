@@ -75,8 +75,8 @@ class CassandraClient(object):
                                     count=count, quorum=quorum, reverse=reverse)
     
     def get_range_slice(self, columnParent, start='', finish='', column_start='',
-            column_finish='', names=None, count=100, reverse=False, quorum=None,
-            super_column=None):
+            column_finish='', names=None, count=100, column_count=100, 
+            reverse=False, quorum=None, super_column=None):
         cp = self._getparent(columnParent, super_column)
         quorum = quorum or self.quorum
         if names:
