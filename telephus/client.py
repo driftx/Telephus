@@ -112,14 +112,14 @@ class CassandraClient(object):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         colsorsupers = self._mk_cols_or_supers(mapping, timestamp)
-        cols = []
+        muts = []
         for c in colsorsupers:
             if isinstance(c, SuperColumn):
-                cols.append(ColumnOrSuperColumn(super_column=c))
+                muts.append(Mutation(ColumnOrSuperColumn(super_column=c)))
             else:
-                cols.append(ColumnOrSuperColumn(column=c))
-        cfmap = {columnFamily: cols}
-        req = ManagedThriftRequest('batch_insert', self.keyspace, key, cfmap, consistency)
+                muts.append(Mutation(ColumnOrSuperColumn(column=c)))
+        mutmap = {key: {columnFamily: muts}}
+        req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
         return self.manager.pushRequest(req)
             
     def _mk_cols_or_supers(self, mapping, timestamp):
