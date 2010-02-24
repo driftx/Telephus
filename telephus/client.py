@@ -1,5 +1,6 @@
 from telephus.cassandra.ttypes import *
 from telephus.protocol import ManagedThriftRequest
+from collections import defaultdict
 import time
 
 class CassandraClient(object):
@@ -109,20 +110,47 @@ class CassandraClient(object):
 
     def batch_insert(self, key, columnFamily, mapping, timestamp=None, consistency=None):
         if isinstance(mapping, list) and timestamp is not None:
-            raise RuntimeError('Timestamp cannot be specified with a list of Columns/SuperColumns')
+            raise RuntimeError('Timestamp cannot be specified with a list of Mutations')
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
-        colsorsupers = self._mk_cols_or_supers(mapping, timestamp)
-        muts = []
-        for c in colsorsupers:
-            if isinstance(c, SuperColumn):
-                muts.append(Mutation(ColumnOrSuperColumn(super_column=c)))
+        mutmap = {key: {columnFamily: self._mk_cols_or_supers(mapping, timestamp)}}
+        return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency)
+    
+    def batch_remove(self, cfmap, start='', finish='', count=100, names=None,
+                     reverse=False, consistency=None, timestamp=None, supercolumn=None):
+        timestamp = timestamp or self._time()
+        consistency = consistency or self.consistency
+        mutmap = defaultdict(dict)
+        for cf, keys in cfmap.iteritems():
+            if names:
+                srange = None
             else:
-                muts.append(Mutation(ColumnOrSuperColumn(column=c)))
-        mutmap = {key: {columnFamily: muts}}
+                srange = SliceRange(start, finish, reverse, count)
+            pred = SlicePredicate(names, srange)
+            for key in keys:
+                mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp, supercolumn, pred))]
         req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
         return self.manager.pushRequest(req)
-            
+    
+    def batch_mutate(self, mutationmap, timestamp=None, consistency=None):
+        timestamp = timestamp or self._time()
+        consistency = consistency or self.consistency
+        mutmap = defaultdict(dict)
+        for key, cfmap in mutationmap.iteritems():
+            for cf, colmap in cfmap.iteritems():
+                colsorsupers = self._mk_cols_or_supers(colmap, timestamp)
+                muts = []
+                for c in colsorsupers:
+                    if isinstance(c, SuperColumn):
+                        muts.append(Mutation(ColumnOrSuperColumn(super_column=c)))
+                    elif isinstance(c, Column):
+                        muts.append(Mutation(ColumnOrSuperColumn(column=c)))
+                    else:
+                        muts.append(c)
+                mutmap[key][cf] = muts
+        req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
+        return self.manager.pushRequest(req)
+        
     def _mk_cols_or_supers(self, mapping, timestamp):
         if isinstance(mapping, list):
             return mapping

@@ -68,6 +68,27 @@ class CassandraClientTest(unittest.TestCase):
         self.assert_(res == 2)
         
     @defer.inlineCallbacks
+    def test_batch_mutate_and_remove(self):
+        yield self.client.batch_mutate({'test': {CF: {COLUMN: 'test', COLUMN2: 'test2'}, SCF: { SCOLUMN: { COLUMN: 'test', COLUMN2: 'test2'} } }, 'test2': {CF: {COLUMN: 'test', COLUMN2: 'test2'}, SCF: { SCOLUMN: { COLUMN: 'test', COLUMN2: 'test2'} } } })
+        res = yield self.client.get_slice('test', CF, names=(COLUMN, COLUMN2))
+        self.assert_(res[0].column.value == 'test')
+        self.assert_(res[1].column.value == 'test2')
+        res = yield self.client.get_slice('test2', CF, names=(COLUMN, COLUMN2))
+        self.assert_(res[0].column.value == 'test')
+        self.assert_(res[1].column.value == 'test2')
+        res = yield self.client.get_slice('test', SCF, names=(COLUMN, COLUMN2),
+                                          super_column=SCOLUMN)
+        self.assert_(res[0].column.value == 'test')
+        self.assert_(res[1].column.value == 'test2')
+        res = yield self.client.get_slice('test2', SCF, names=(COLUMN, COLUMN2),
+                                          super_column=SCOLUMN)
+        self.assert_(res[0].column.value == 'test')
+        self.assert_(res[1].column.value == 'test2')
+        yield self.client.batch_remove({CF: ['test', 'test2']}, names=['test', 'test2'])
+        yield self.client.batch_remove({SCF: ['test', 'test2']}, names=['test', 'test2'], supercolumn=SCOLUMN)
+
+
+    @defer.inlineCallbacks
     def test_multiget_slice_remove(self):
         yield self.client.insert('test', CF, 'testval', column=COLUMN)
         yield self.client.insert('test', CF, 'testval', column=COLUMN2)
