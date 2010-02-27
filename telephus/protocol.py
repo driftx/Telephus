@@ -4,6 +4,7 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
 from telephus.cassandra import Cassandra
+from telephus.cassandra.ttypes import InvalidRequestException
 
 class ClientBusy(Exception):
     pass
@@ -96,7 +97,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     @defer.inlineCallbacks
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
-            if r < 1:
+            if isinstance(err, InvalidRequestException) or \
+               isinstance(err, InvalidThriftRequest) or r < 1:
                 d.errback(err)
                 self._pending.remove(d)
             else:
