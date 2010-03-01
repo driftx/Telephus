@@ -103,6 +103,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 self._pending.remove(d)
             else:
                 self.queue.put((req, d, r))
+            return err
         def reqSuccess(res, d):
             d.callback(res)
             self._pending.remove(d)
