@@ -1,3 +1,12 @@
+python-telephus (0.6) unstable; urgency=low
+
+  * Updated thrift code
+  * batch_mutate with convenience methods for insert/remove
+  * retryable requests
+  * 'quorum' kwarg is now 'consistency'
+
+ -- Brandon Williams <brandon@racklabs.com>  Mon, 01 Mar 2010 12:42:10 -0600
+
 python-telephus (0.5) unstable; urgency=low
 
   * Initial release.
