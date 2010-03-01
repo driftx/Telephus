@@ -11,11 +11,13 @@ Installation
 
 Prerequisites:
 
- * Python 2.4 or later
+ * Python 2.5 or later
  * Twisted 8.1.0 or later
  * Thrift (latest svn)
 
 Usage
 -----
+
+NOTE: Twisted requires the framed thrift transport.  You should set <ThriftFramedTransport>true</ThriftFramedTransport> in Cassandra's storage-conf.xml
 
 See example.py for an example of how to use the Telephus API.
