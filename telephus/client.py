@@ -66,8 +66,8 @@ class CassandraClient(object):
                                    pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
-    def get_count(self, key, columnParent, consistency=None, retries=None):    
-        cp = self._getparent(columnParent)
+    def get_count(self, key, columnParent, super_column=None, consistency=None, retries=None):    
+        cp = self._getparent(columnParent, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('get_count', self.keyspace, key, cp,
                                    consistency)
