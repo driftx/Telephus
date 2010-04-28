@@ -147,20 +147,22 @@ class CassandraClient(object):
         mutmap = defaultdict(dict)
         for key, cfmap in mutationmap.iteritems():
             for cf, colmap in cfmap.iteritems():
-                colsorsupers = self._mk_cols_or_supers(colmap, timestamp)
+                cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, make_deletions=True)
                 muts = []
-                for c in colsorsupers:
+                for c in cols_or_supers_or_deletions:
                     if isinstance(c, SuperColumn):
                         muts.append(Mutation(ColumnOrSuperColumn(super_column=c)))
                     elif isinstance(c, Column):
                         muts.append(Mutation(ColumnOrSuperColumn(column=c)))
+                    elif isinstance(c, Deletion):
+                        muts.append(Mutation(deletion=c))
                     else:
                         muts.append(c)
                 mutmap[key][cf] = muts
         req = ManagedThriftRequest('batch_mutate', self.keyspace, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
         
-    def _mk_cols_or_supers(self, mapping, timestamp):
+    def _mk_cols_or_supers(self, mapping, timestamp, make_deletions=False):
         if isinstance(mapping, list):
             return mapping
         colsorsupers = []
@@ -173,8 +175,14 @@ class CassandraClient(object):
                         cols.append(Column(col, val, timestamp))
                     colsorsupers.append(SuperColumn(name=name, columns=cols))
             else:
-                for col,val in mapping.iteritems():
-                    colsorsupers.append(Column(col, val, timestamp))
+                cols2delete = []
+                for col, val in mapping.iteritems():
+                    if val is None and make_deletions:
+                        cols2delete.append(col)
+                    else:
+                        colsorsupers.append(Column(col, val, timestamp))
+                if cols2delete:
+                    colsorsupers.append(Deletion(timestamp, None, SlicePredicate(column_names=cols2delete)))
         else:
             raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
         return colsorsupers

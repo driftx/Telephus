@@ -87,6 +87,16 @@ class CassandraClientTest(unittest.TestCase):
         yield self.client.batch_remove({CF: ['test', 'test2']}, names=['test', 'test2'])
         yield self.client.batch_remove({SCF: ['test', 'test2']}, names=['test', 'test2'], supercolumn=SCOLUMN)
 
+    @defer.inlineCallbacks
+    def test_batch_mutate_with_deletion(self):
+        yield self.client.batch_mutate({'test': {CF: {COLUMN: 'test', COLUMN2: 'test2'}}})
+        res = yield self.client.get_slice('test', CF, names=(COLUMN, COLUMN2))
+        self.assert_(res[0].column.value == 'test')
+        self.assert_(res[1].column.value == 'test2')
+        yield self.client.batch_mutate({'test': {CF: {COLUMN: None, COLUMN2: 'test3'}}})
+        res = yield self.client.get_slice('test', CF, names=(COLUMN, COLUMN2))
+        self.assert_(len(res) == 1)
+        self.assert_(res[0].column.value == 'test3')
 
     @defer.inlineCallbacks
     def test_multiget_slice_remove(self):
