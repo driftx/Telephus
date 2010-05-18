@@ -73,27 +73,29 @@ class CassandraClient(object):
                                    consistency)
         return self.manager.pushRequest(req, retries=retries)
     
-    def get_key_range(self, columnParent, start='', finish='', count=100,
-                    column_count=100, reverse=False, consistency=None,
-                    retries=None):
-        consistency = consistency or self.consistency
-        return self.get_range_slice(columnParent, start=start, finish=finish,
-                                    count=count, column_count=column_count,
-                                    consistency=consistency, reverse=reverse,
-                                    retries=retries)
+    def get_key_range(self, columnParent, **kwargs):
+        return self.get_range_slices(columnParent, **kwargs)
     
-    def get_range_slice(self, columnParent, start='', finish='', column_start='',
-            column_finish='', names=None, count=100, column_count=100, 
-            reverse=False, consistency=None, super_column=None, retries=None):
+    def get_range_slice(self, columnParent, **kwargs):
+        return self.get_range_slices(columnParent, **kwargs)
+    
+    def get_range_slices(self, columnParent, start='', finish='', column_start='',
+            column_finish='', names=None, count=100, column_count=100,
+            reverse=False, use_tokens=False, consistency=None, super_column=None,
+            retries=None):
         cp = self._getparent(columnParent, super_column)
         consistency = consistency or self.consistency
         if names:
             srange = None
         else:
             srange = SliceRange(column_start, column_finish, reverse, column_count)
+        if not use_tokens:
+            krange = KeyRange(start_key=start, end_key=finish, count=count)
+        else:
+            krange = KeyRange(start_token=start, end_token=finish, count=count)
         pred = SlicePredicate(names, srange)
-        req = ManagedThriftRequest('get_range_slice', self.keyspace, cp, pred,
-                                   start, finish, count, consistency)
+        req = ManagedThriftRequest('get_range_slices', self.keyspace, cp, pred,
+                    krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     def insert(self, key, columnPath, value, column=None, super_column=None,

@@ -116,4 +116,13 @@ class CassandraClientTest(unittest.TestCase):
         self.assert_(res['test'].column == None)
         self.assert_(res['test2'].column == None)
         
-        
+    @defer.inlineCallbacks
+    def test_range_slices(self):
+        yield self.client.insert('test', CF, 'testval', column=COLUMN)
+        yield self.client.insert('test', CF, 'testval', column=COLUMN2)
+        yield self.client.insert('test2', CF, 'testval2', column=COLUMN)
+        ks = yield self.client.get_range_slices(CF, start='', finish='')
+        keys = [k.key for k in ks]
+        for key in ['test', 'test2']:
+            self.assert_(key in keys)
+            
