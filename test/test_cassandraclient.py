@@ -125,4 +125,12 @@ class CassandraClientTest(unittest.TestCase):
         keys = [k.key for k in ks]
         for key in ['test', 'test2']:
             self.assert_(key in keys)
+
+    @defer.inlineCallbacks
+    def test_errback(self):
+        yield self.client.remove('poiqwe', CF)
+        try:
+            yield self.client.get('poiqwe', CF, column='foo')
+        except Exception, e:
+            pass
             
