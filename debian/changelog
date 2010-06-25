@@ -1,3 +1,10 @@
+python-telephus (0.6.2) unstable; urgency=low
+
+  * Fix double errbacks
+  * remove use of inlineCallbacks in the factory
+
+ --  Brandon Williams <brandon@riptano.com>  Fri, 25 Jun 2010 22:27:29 +0000
+
 python-telephus (0.6.1) unstable; urgency=low
 
   * batch_mutate deletes columns when their value is None
