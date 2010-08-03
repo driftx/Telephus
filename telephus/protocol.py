@@ -4,7 +4,7 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
 from telephus.cassandra import Cassandra
-from telephus.cassandra.ttypes import InvalidRequestException
+from telephus.cassandra.ttypes import *
 
 class ClientBusy(Exception):
     pass
@@ -18,14 +18,19 @@ class ManagedThriftRequest(object):
         self.args = args
 
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
-    def __init__(self, client_class, iprot_factory, oprot_factory=None):
+    def __init__(self, client_class, keyspace, iprot_factory, oprot_factory=None):
         TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
         self.deferred = None
-                
+        self.keyspace = keyspace
+        
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.client.protocol = self
-        self.factory.clientIdle(self)
+        d = self.client.set_keyspace(self.keyspace)
+        def keyspaceok(res):
+            self.factory.clientIdle(self, res)
+        d.addCallback(keyspaceok)
+        d.addErrback(self.factory.clientConnectionFailed, self)
         
     def connectionLost(self, reason=None):
         try:
@@ -52,18 +57,37 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         else:
             raise ClientBusy
         
+class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
+    def __init__(self, client_class, credentials, iprot_factory, oprot_factory=None):
+        TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
+        self.deferred = None
+        self.credentials = credentials
+        
+    def connectionMade(self):
+        TTwisted.ThriftClientProtocol.connectionMade(self)
+        self.client.protocol = self
+        def loginok(res):
+            ManagedThriftClientProtocol.connectionMade(self)
+        d = self.client.login(AuthenticationRequest(credentials=self.credentials))
+        d.addCallback(loginok)
+        d.addErrback(self.factory.clientConnectionFailed, self)
+        
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, retries=0):
+    def __init__(self, keyspace, retries=0, credentials={}):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
         self._protos = []
         self._pending = []
         self.request_retries = retries
+        self.keyspace = keyspace
+        self.credentials = credentials
+        if credentials:
+            self.protocol = AuthenticatedThriftClientProtocol
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -79,14 +103,17 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
         self._errback(reason)
 
-    def clientIdle(self, proto):
+    def clientIdle(self, proto, result=True):
         if proto not in self._protos:
             self._protos.append(proto)
         self.submitRequest(proto)
-        self._callback(True)
+        self._callback(result)
 
     def buildProtocol(self, addr):
-        p = self.protocol(Cassandra.Client, self.thriftFactory())
+        if self.credentials:
+            p = self.protocol(Cassandra.Client, self.credentials, self.thriftFactory()))
+        else:
+            p = self.protocol(Cassandra.Client, self.thriftFactory())
         p.factory = self
         self.resetDelay()
         return p
