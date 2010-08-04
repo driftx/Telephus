@@ -190,6 +190,61 @@ class CassandraClient(object):
         req = ManagedThriftRequest('get_string_list_property', name)
         return self.manager.pushRequest(req, retries=retries)
 
+    def describe_keyspaces(self, retries=None):
+        req = ManagedThriftRequest('describe_keyspaces')
+        return self.manager.pushRequest(req, retries=retries)
+    
     def describe_keyspace(self, keyspace, retries=None):
         req = ManagedThriftRequest('describe_keyspace', keyspace)
         return self.manager.pushRequest(req, retries=retries)
+
+    def describe_cluster_name(self, retries=None):
+        req = ManagedThriftRequest('describe_cluster_name')
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def describe_partitioner(self, retries=None):
+        req = ManagedThriftRequest('describe_partitioner')
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def describe_ring(self, keyspace, retries=None):
+        req = ManagedThriftRequest('describe_ring', keyspace)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split,
+                        retries=retries):
+        req = ManagedThriftRequest('describe_splits', keyspace, cfName, start_token,
+                                   end_token, keys_per_split)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def truncate(self, cfName, retries=None):
+        req = ManagedThriftRequest('truncate', cfName)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def check_schema_agreement(self, retries=None):
+        req = ManagedThriftRequest('check_schema_agreement')
+        self.manager.pushRequest(req, retries=retries)
+    
+    def system_drop_column_family(self, cfName, retries=None):
+        req = ManagedThriftRequest('system_drop_column_family', cfName)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def system_drop_keyspace(self, keyspace, retries=None):
+        req = ManagedThriftRequest('system_drop_keyspace', keyspace)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def system_rename_column_family(self, oldname, newname, retries=None):
+        req = ManagedThriftRequest('system_rename_column_family', oldname, newname)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def system_rename_keyspace(self, oldname, newname, retries=None):
+        req = ManagedThriftRequest('system_rename_keyspace', oldname, newname)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    # TODO: make friendly
+    def system_add_column_family(self, cfDef, retries=None):
+        req = ManagedThriftRequest('system_add_column_family', cfDef)
+        return self.manager.pushRequest(req, cfDef, retries=reties)
+    
+    def system_add_keyspace(self, ksDef, retries=None):
+        req = ManagedThriftRequest('system_add_keyspace', ksDef)
+        return self.manager.pushRequest(req, ksDef, retries=retries)
