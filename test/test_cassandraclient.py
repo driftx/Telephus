@@ -104,8 +104,8 @@ class CassandraClientTest(unittest.TestCase):
         yield self.client.insert('test', CF, 'testval', column=COLUMN2)
         yield self.client.insert('test2', CF, 'testval2', column=COLUMN)
         res = yield self.client.multiget(['test', 'test2'], CF, column=COLUMN)
-        self.assert_(res['test'].column.value == 'testval')
-        self.assert_(res['test2'].column.value == 'testval2')
+        self.assert_(res['test'][0].column.value == 'testval')
+        self.assert_(res['test2'][0].column.value == 'testval2')
         res = yield self.client.multiget_slice(['test', 'test2'], CF)
         self.assert_(res['test'][0].column.value == 'testval')
         self.assert_(res['test'][1].column.value == 'testval')
@@ -113,8 +113,8 @@ class CassandraClientTest(unittest.TestCase):
         yield self.client.remove('test', CF, column=COLUMN)
         yield self.client.remove('test2', CF, column=COLUMN)
         res = yield self.client.multiget(['test', 'test2'], CF, column=COLUMN)
-        self.assert_(res['test'].column == None)
-        self.assert_(res['test2'].column == None)
+        self.assert_(len(res['test']) == 0)
+        self.assert_(len(res['test2']) == 0)
         
     @defer.inlineCallbacks
     def test_range_slices(self):

@@ -22,6 +22,12 @@ class CassandraClient(object):
             return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
+    def _mkpred(self, names, start, finish, reverse, count):
+        if names:
+            srange = None
+        else:
+            srange = SliceRange(start, finish, reverse, count)
+        return SlicePredicate(names, srange)
     
     def get(self, key, columnPath, column=None, super_column=None, consistency=None,
             retries=None):
@@ -34,32 +40,22 @@ class CassandraClient(object):
                   reverse=False, count=100, consistency=None, super_column=None,
                   retries=None):
         cp = self._getparent(columnParent, super_column)
-        if names:
-            srange = None
-        else:
-            srange = SliceRange(start, finish, reverse, count)
         consistency = consistency or self.consistency
-        pred = SlicePredicate(names, srange)
+        pred = self._mkpred(names, start, finish, reverse, count)
         req = ManagedThriftRequest('get_slice', key, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
-    def multiget(self, keys, columnPath, column=None, super_column=None,
-                 consistency=None, retries=None):
-        cp = self._getpath(columnPath, column, super_column)
-        consistency = consistency or self.consistency
-        req = ManagedThriftRequest('multiget', keys, cp, consistency)
-        return self.manager.pushRequest(req, retries=retries)
+    def multiget(self, keys, columnParent, column=None, super_column=None,
+                  consistency=None, retries=None):
+        return self.multiget_slice(keys, columnParent, names=[column], count=100,
+                   consistency=consistency, retries=retries, super_column=super_column)
     
     def multiget_slice(self, keys, columnParent, names=None, start='', finish='',
                   reverse=False, count=100, consistency=None, super_column=None,
                   retries=None):
         cp = self._getparent(columnParent, super_column)
-        if names:
-            srange = None
-        else:
-            srange = SliceRange(start, finish, reverse, count)
         consistency = consistency or self.consistency
-        pred = SlicePredicate(names, srange)
+        pred = self._mkpred(names, start, finish, reverse, count)
         req = ManagedThriftRequest('multiget_slice', keys, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
@@ -81,15 +77,11 @@ class CassandraClient(object):
             retries=None):
         cp = self._getparent(columnParent, super_column)
         consistency = consistency or self.consistency
-        if names:
-            srange = None
-        else:
-            srange = SliceRange(column_start, column_finish, reverse, column_count)
         if not use_tokens:
             krange = KeyRange(start_key=start, end_key=finish, count=count)
         else:
             krange = KeyRange(start_token=start, end_token=finish, count=count)
-        pred = SlicePredicate(names, srange)
+        pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
         req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
@@ -126,11 +118,7 @@ class CassandraClient(object):
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
         for cf, keys in cfmap.iteritems():
-            if names:
-                srange = None
-            else:
-                srange = SliceRange(start, finish, reverse, count)
-            pred = SlicePredicate(names, srange)
+            pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
                 mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp, supercolumn, pred))]
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
