@@ -93,12 +93,12 @@ class CassandraClient(object):
         req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
-    def insert(self, key, columnPath, value, column=None, super_column=None,
+    def insert(self, key, columnParent, value, column=None, super_column=None,
                timestamp=None, consistency=None, retries=None):
         timestamp = timestamp or self._time()
-        cp = self._getpath(columnPath, column, super_column)
+        cp = self._getparent(columnParent, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('insert', key, cp, value, timestamp, consistency)
+        req = ManagedThriftRequest('insert', key, cp, Column(column, value, timestamp), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     def remove(self, key, columnPath, column=None, super_column=None, 
