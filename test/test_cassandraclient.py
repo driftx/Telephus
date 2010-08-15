@@ -18,8 +18,8 @@ SCOLUMN = 'bar'
 
 class CassandraClientTest(unittest.TestCase):
     def setUp(self):
-        self.cmanager = ManagedCassandraClientFactory()
-        self.client = CassandraClient(self.cmanager, KEYSPACE)
+        self.cmanager = ManagedCassandraClientFactory(KEYSPACE)
+        self.client = CassandraClient(self.cmanager)
         for i in xrange(CONNS):
             reactor.connectTCP(HOST, PORT, self.cmanager)
         return self.cmanager.deferred
@@ -134,3 +134,10 @@ class CassandraClientTest(unittest.TestCase):
         except Exception, e:
             pass
             
+    @defer.inlineCallbacks
+    def test_bad_params(self):
+        try:
+            # pass an int where a string is required
+            yield self.client.get(12345, CF, column='foo')
+        except Exception, e:
+            pass
