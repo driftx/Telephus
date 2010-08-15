@@ -59,10 +59,12 @@ class CassandraClient(object):
         req = ManagedThriftRequest('multiget_slice', keys, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
-    def get_count(self, key, columnParent, super_column=None, consistency=None, retries=None):    
+    def get_count(self, key, columnParent, super_column=None, start='', finish='',
+                  consistency=None, retries=None):    
         cp = self._getparent(columnParent, super_column)
+        pred = self._mkpred(None, start, finish, False, 2147483647)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('get_count', key, cp, consistency)
+        req = ManagedThriftRequest('get_count', key, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
     def get_key_range(self, columnParent, **kwargs):
