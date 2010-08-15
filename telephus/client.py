@@ -9,7 +9,7 @@ class CassandraClient(object):
         self.consistency = consistency
         
     def _time(self):
-        return int(time.time() * 1000)
+        return Clock(timestamp=int(time.time() * 1000000))
     
     def _getparent(self, columnParentOrCF, super_column=None):
         if isinstance(columnParentOrCF, str):
