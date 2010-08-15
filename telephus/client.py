@@ -211,7 +211,7 @@ class CassandraClient(object):
         return self.manager.pushRequest(req, retries=retries)
     
     def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split,
-                        retries=retries):
+                        retries=None):
         req = ManagedThriftRequest('describe_splits', keyspace, cfName, start_token,
                                    end_token, keys_per_split)
         return self.manager.pushRequest(req, retries=retries)
@@ -248,3 +248,7 @@ class CassandraClient(object):
     def system_add_keyspace(self, ksDef, retries=None):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
         return self.manager.pushRequest(req, ksDef, retries=retries)
+
+    def describe_version(self, retries=None):
+        req = ManagedThriftRequest('describe_version')
+        return self.manager.pushRequest(req, retries=retries)

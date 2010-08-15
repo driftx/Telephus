@@ -14,23 +14,26 @@ try:
 except:
   fastbinary = None
 
+from zope.interface import Interface, implements
+from twisted.internet import defer
+from thrift.transport import TTwisted
 
-class Iface:
-  def login(self, auth_request):
+class Iface(Interface):
+  def login(auth_request):
     """
     Parameters:
      - auth_request
     """
     pass
 
-  def set_keyspace(self, keyspace):
+  def set_keyspace(keyspace):
     """
     Parameters:
      - keyspace
     """
     pass
 
-  def get(self, key, column_path, consistency_level):
+  def get(key, column_path, consistency_level):
     """
     Get the Column or SuperColumn at the given column_path. If no value is present, NotFoundException is thrown. (This is
     the only method that can throw an exception under non-failure conditions.)
@@ -42,7 +45,7 @@ class Iface:
     """
     pass
 
-  def get_slice(self, key, column_parent, predicate, consistency_level):
+  def get_slice(key, column_parent, predicate, consistency_level):
     """
     Get the group of columns contained by column_parent (either a ColumnFamily name or a ColumnFamily/SuperColumn name
     pair) specified by the given SlicePredicate. If no matching values are found, an empty list is returned.
@@ -55,7 +58,7 @@ class Iface:
     """
     pass
 
-  def get_count(self, key, column_parent, predicate, consistency_level):
+  def get_count(key, column_parent, predicate, consistency_level):
     """
     returns the number of columns matching <code>predicate</code> for a particular <code>key</code>,
     <code>ColumnFamily</code> and optionally <code>SuperColumn</code>.
@@ -68,7 +71,7 @@ class Iface:
     """
     pass
 
-  def multiget_slice(self, keys, column_parent, predicate, consistency_level):
+  def multiget_slice(keys, column_parent, predicate, consistency_level):
     """
     Performs a get_slice for column_parent and predicate for the given keys in parallel.
     
@@ -80,7 +83,7 @@ class Iface:
     """
     pass
 
-  def multiget_count(self, keyspace, keys, column_parent, predicate, consistency_level):
+  def multiget_count(keyspace, keys, column_parent, predicate, consistency_level):
     """
     Perform a get_count in parallel on the given list<binary> keys. The return value maps keys to the count found.
     
@@ -93,7 +96,7 @@ class Iface:
     """
     pass
 
-  def get_range_slices(self, column_parent, predicate, range, consistency_level):
+  def get_range_slices(column_parent, predicate, range, consistency_level):
     """
     returns a subset of columns for a contiguous range of keys.
     
@@ -105,7 +108,7 @@ class Iface:
     """
     pass
 
-  def get_indexed_slices(self, column_parent, index_clause, column_predicate, consistency_level):
+  def get_indexed_slices(column_parent, index_clause, column_predicate, consistency_level):
     """
     Returns the subset of columns specified in SlicePredicate for the rows matching the IndexClause
     
@@ -117,7 +120,7 @@ class Iface:
     """
     pass
 
-  def insert(self, key, column_parent, column, consistency_level):
+  def insert(key, column_parent, column, consistency_level):
     """
     Insert a Column at the given column_parent.column_family and optional column_parent.super_column.
     
@@ -129,7 +132,7 @@ class Iface:
     """
     pass
 
-  def remove(self, key, column_path, clock, consistency_level):
+  def remove(key, column_path, clock, consistency_level):
     """
     Remove data from the row specified by key at the granularity specified by column_path, and the given clock. Note
     that all the values in column_path besides column_path.column_family are truly optional: you can remove the entire
@@ -143,7 +146,7 @@ class Iface:
     """
     pass
 
-  def batch_mutate(self, mutation_map, consistency_level):
+  def batch_mutate(mutation_map, consistency_level):
     """
       Mutate many columns or super columns for many row keys. See also: Mutation.
     
@@ -156,7 +159,7 @@ class Iface:
     """
     pass
 
-  def truncate(self, cfname):
+  def truncate(cfname):
     """
     Truncate will mark and entire column family as deleted.
     From the user's perspective a successful call to truncate will result complete data deletion from cfname.
@@ -170,7 +173,7 @@ class Iface:
     """
     pass
 
-  def check_schema_agreement(self, ):
+  def check_schema_agreement():
     """
     ask the cluster if they all are using the same migration id. returns a map of version->hosts-on-that-version.
     hosts that did not respond will be under the key DatabaseDescriptor.INITIAL_VERSION. agreement can be determined
@@ -178,25 +181,25 @@ class Iface:
     """
     pass
 
-  def describe_keyspaces(self, ):
+  def describe_keyspaces():
     """
     list the defined keyspaces in this cluster
     """
     pass
 
-  def describe_cluster_name(self, ):
+  def describe_cluster_name():
     """
     get the cluster name
     """
     pass
 
-  def describe_version(self, ):
+  def describe_version():
     """
     get the thrift api version
     """
     pass
 
-  def describe_ring(self, keyspace):
+  def describe_ring(keyspace):
     """
     get the token ring: a map of ranges to host addresses,
     represented as a set of TokenRange instead of a map from range
@@ -212,13 +215,13 @@ class Iface:
     """
     pass
 
-  def describe_partitioner(self, ):
+  def describe_partitioner():
     """
     returns the partitioner used by this cluster
     """
     pass
 
-  def describe_keyspace(self, keyspace):
+  def describe_keyspace(keyspace):
     """
     describe specified keyspace
     
@@ -227,7 +230,7 @@ class Iface:
     """
     pass
 
-  def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split):
+  def describe_splits(keyspace, cfName, start_token, end_token, keys_per_split):
     """
     experimental API for hadoop/parallel query support.
     may change violently and without warning.
@@ -244,7 +247,7 @@ class Iface:
     """
     pass
 
-  def system_add_column_family(self, cf_def):
+  def system_add_column_family(cf_def):
     """
     adds a column family. returns the new schema id.
     
@@ -253,7 +256,7 @@ class Iface:
     """
     pass
 
-  def system_drop_column_family(self, column_family):
+  def system_drop_column_family(column_family):
     """
     drops a column family. returns the new schema id.
     
@@ -262,7 +265,7 @@ class Iface:
     """
     pass
 
-  def system_rename_column_family(self, old_name, new_name):
+  def system_rename_column_family(old_name, new_name):
     """
     renames a column family. returns the new schema id.
     
@@ -272,7 +275,7 @@ class Iface:
     """
     pass
 
-  def system_add_keyspace(self, ks_def):
+  def system_add_keyspace(ks_def):
     """
     adds a keyspace and any column families that are part of it. returns the new schema id.
     
@@ -281,7 +284,7 @@ class Iface:
     """
     pass
 
-  def system_drop_keyspace(self, keyspace):
+  def system_drop_keyspace(keyspace):
     """
     drops a keyspace and any column families that are part of it. returns the new schema id.
     
@@ -290,7 +293,7 @@ class Iface:
     """
     pass
 
-  def system_rename_keyspace(self, old_name, new_name):
+  def system_rename_keyspace(old_name, new_name):
     """
     renames a keyspace. returns the new schema id.
     
@@ -301,76 +304,84 @@ class Iface:
     pass
 
 
-class Client(Iface):
-  def __init__(self, iprot, oprot=None):
-    self._iprot = self._oprot = iprot
-    if oprot != None:
-      self._oprot = oprot
+class Client:
+  implements(Iface)
+
+  def __init__(self, transport, oprot_factory):
+    self._transport = transport
+    self._oprot_factory = oprot_factory
     self._seqid = 0
+    self._reqs = {}
 
   def login(self, auth_request):
     """
     Parameters:
      - auth_request
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_login(auth_request)
-    return self.recv_login()
+    return d
 
   def send_login(self, auth_request):
-    self._oprot.writeMessageBegin('login', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('login', TMessageType.CALL, self._seqid)
     args = login_args()
     args.auth_request = auth_request
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_login(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_login(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = login_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.authnx != None:
-      raise result.authnx
+      return d.errback(result.authnx)
     if result.authzx != None:
-      raise result.authzx
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "login failed: unknown result");
+      return d.errback(result.authzx)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "login failed: unknown result"))
 
   def set_keyspace(self, keyspace):
     """
     Parameters:
      - keyspace
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_set_keyspace(keyspace)
-    self.recv_set_keyspace()
+    return d
 
   def send_set_keyspace(self, keyspace):
-    self._oprot.writeMessageBegin('set_keyspace', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('set_keyspace', TMessageType.CALL, self._seqid)
     args = set_keyspace_args()
     args.keyspace = keyspace
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_set_keyspace(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_set_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = set_keyspace_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.ire != None:
-      raise result.ire
-    return
+      return d.errback(result.ire)
+    return d.callback(None)
 
   def get(self, key, column_path, consistency_level):
     """
@@ -382,40 +393,43 @@ class Client(Iface):
      - column_path
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_get(key, column_path, consistency_level)
-    return self.recv_get()
+    return d
 
   def send_get(self, key, column_path, consistency_level):
-    self._oprot.writeMessageBegin('get', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('get', TMessageType.CALL, self._seqid)
     args = get_args()
     args.key = key
     args.column_path = column_path
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_get(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_get(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = get_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.nfe != None:
-      raise result.nfe
+      return d.errback(result.nfe)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "get failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "get failed: unknown result"))
 
   def get_slice(self, key, column_parent, predicate, consistency_level):
     """
@@ -428,39 +442,42 @@ class Client(Iface):
      - predicate
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_get_slice(key, column_parent, predicate, consistency_level)
-    return self.recv_get_slice()
+    return d
 
   def send_get_slice(self, key, column_parent, predicate, consistency_level):
-    self._oprot.writeMessageBegin('get_slice', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('get_slice', TMessageType.CALL, self._seqid)
     args = get_slice_args()
     args.key = key
     args.column_parent = column_parent
     args.predicate = predicate
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_get_slice(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_get_slice(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = get_slice_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "get_slice failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "get_slice failed: unknown result"))
 
   def get_count(self, key, column_parent, predicate, consistency_level):
     """
@@ -473,39 +490,42 @@ class Client(Iface):
      - predicate
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_get_count(key, column_parent, predicate, consistency_level)
-    return self.recv_get_count()
+    return d
 
   def send_get_count(self, key, column_parent, predicate, consistency_level):
-    self._oprot.writeMessageBegin('get_count', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('get_count', TMessageType.CALL, self._seqid)
     args = get_count_args()
     args.key = key
     args.column_parent = column_parent
     args.predicate = predicate
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_get_count(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_get_count(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = get_count_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "get_count failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "get_count failed: unknown result"))
 
   def multiget_slice(self, keys, column_parent, predicate, consistency_level):
     """
@@ -517,39 +537,42 @@ class Client(Iface):
      - predicate
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_multiget_slice(keys, column_parent, predicate, consistency_level)
-    return self.recv_multiget_slice()
+    return d
 
   def send_multiget_slice(self, keys, column_parent, predicate, consistency_level):
-    self._oprot.writeMessageBegin('multiget_slice', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('multiget_slice', TMessageType.CALL, self._seqid)
     args = multiget_slice_args()
     args.keys = keys
     args.column_parent = column_parent
     args.predicate = predicate
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_multiget_slice(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_multiget_slice(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = multiget_slice_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "multiget_slice failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "multiget_slice failed: unknown result"))
 
   def multiget_count(self, keyspace, keys, column_parent, predicate, consistency_level):
     """
@@ -562,40 +585,43 @@ class Client(Iface):
      - predicate
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_multiget_count(keyspace, keys, column_parent, predicate, consistency_level)
-    return self.recv_multiget_count()
+    return d
 
   def send_multiget_count(self, keyspace, keys, column_parent, predicate, consistency_level):
-    self._oprot.writeMessageBegin('multiget_count', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('multiget_count', TMessageType.CALL, self._seqid)
     args = multiget_count_args()
     args.keyspace = keyspace
     args.keys = keys
     args.column_parent = column_parent
     args.predicate = predicate
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_multiget_count(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_multiget_count(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = multiget_count_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "multiget_count failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "multiget_count failed: unknown result"))
 
   def get_range_slices(self, column_parent, predicate, range, consistency_level):
     """
@@ -607,39 +633,42 @@ class Client(Iface):
      - range
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_get_range_slices(column_parent, predicate, range, consistency_level)
-    return self.recv_get_range_slices()
+    return d
 
   def send_get_range_slices(self, column_parent, predicate, range, consistency_level):
-    self._oprot.writeMessageBegin('get_range_slices', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('get_range_slices', TMessageType.CALL, self._seqid)
     args = get_range_slices_args()
     args.column_parent = column_parent
     args.predicate = predicate
     args.range = range
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_get_range_slices(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_get_range_slices(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = get_range_slices_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "get_range_slices failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "get_range_slices failed: unknown result"))
 
   def get_indexed_slices(self, column_parent, index_clause, column_predicate, consistency_level):
     """
@@ -651,39 +680,42 @@ class Client(Iface):
      - column_predicate
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_get_indexed_slices(column_parent, index_clause, column_predicate, consistency_level)
-    return self.recv_get_indexed_slices()
+    return d
 
   def send_get_indexed_slices(self, column_parent, index_clause, column_predicate, consistency_level):
-    self._oprot.writeMessageBegin('get_indexed_slices', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('get_indexed_slices', TMessageType.CALL, self._seqid)
     args = get_indexed_slices_args()
     args.column_parent = column_parent
     args.index_clause = index_clause
     args.column_predicate = column_predicate
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_get_indexed_slices(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_get_indexed_slices(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = get_indexed_slices_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "get_indexed_slices failed: unknown result");
+      return d.errback(result.te)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "get_indexed_slices failed: unknown result"))
 
   def insert(self, key, column_parent, column, consistency_level):
     """
@@ -695,37 +727,40 @@ class Client(Iface):
      - column
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_insert(key, column_parent, column, consistency_level)
-    self.recv_insert()
+    return d
 
   def send_insert(self, key, column_parent, column, consistency_level):
-    self._oprot.writeMessageBegin('insert', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('insert', TMessageType.CALL, self._seqid)
     args = insert_args()
     args.key = key
     args.column_parent = column_parent
     args.column = column
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_insert(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_insert(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = insert_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    return
+      return d.errback(result.te)
+    return d.callback(None)
 
   def remove(self, key, column_path, clock, consistency_level):
     """
@@ -739,37 +774,40 @@ class Client(Iface):
      - clock
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_remove(key, column_path, clock, consistency_level)
-    self.recv_remove()
+    return d
 
   def send_remove(self, key, column_path, clock, consistency_level):
-    self._oprot.writeMessageBegin('remove', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('remove', TMessageType.CALL, self._seqid)
     args = remove_args()
     args.key = key
     args.column_path = column_path
     args.clock = clock
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_remove(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_remove(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = remove_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    return
+      return d.errback(result.te)
+    return d.callback(None)
 
   def batch_mutate(self, mutation_map, consistency_level):
     """
@@ -782,35 +820,38 @@ class Client(Iface):
      - mutation_map
      - consistency_level
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_batch_mutate(mutation_map, consistency_level)
-    self.recv_batch_mutate()
+    return d
 
   def send_batch_mutate(self, mutation_map, consistency_level):
-    self._oprot.writeMessageBegin('batch_mutate', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('batch_mutate', TMessageType.CALL, self._seqid)
     args = batch_mutate_args()
     args.mutation_map = mutation_map
     args.consistency_level = consistency_level
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_batch_mutate(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_batch_mutate(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = batch_mutate_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
+      return d.errback(result.ue)
     if result.te != None:
-      raise result.te
-    return
+      return d.errback(result.te)
+    return d.callback(None)
 
   def truncate(self, cfname):
     """
@@ -824,32 +865,35 @@ class Client(Iface):
     Parameters:
      - cfname
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_truncate(cfname)
-    self.recv_truncate()
+    return d
 
   def send_truncate(self, cfname):
-    self._oprot.writeMessageBegin('truncate', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('truncate', TMessageType.CALL, self._seqid)
     args = truncate_args()
     args.cfname = cfname
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_truncate(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_truncate(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = truncate_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.ire != None:
-      raise result.ire
+      return d.errback(result.ire)
     if result.ue != None:
-      raise result.ue
-    return
+      return d.errback(result.ue)
+    return d.callback(None)
 
   def check_schema_agreement(self, ):
     """
@@ -857,115 +901,127 @@ class Client(Iface):
     hosts that did not respond will be under the key DatabaseDescriptor.INITIAL_VERSION. agreement can be determined
     by checking if the size of the map is 1.
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_check_schema_agreement()
-    return self.recv_check_schema_agreement()
+    return d
 
   def send_check_schema_agreement(self, ):
-    self._oprot.writeMessageBegin('check_schema_agreement', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('check_schema_agreement', TMessageType.CALL, self._seqid)
     args = check_schema_agreement_args()
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_check_schema_agreement(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_check_schema_agreement(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = check_schema_agreement_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "check_schema_agreement failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "check_schema_agreement failed: unknown result"))
 
   def describe_keyspaces(self, ):
     """
     list the defined keyspaces in this cluster
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_keyspaces()
-    return self.recv_describe_keyspaces()
+    return d
 
   def send_describe_keyspaces(self, ):
-    self._oprot.writeMessageBegin('describe_keyspaces', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_keyspaces', TMessageType.CALL, self._seqid)
     args = describe_keyspaces_args()
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_keyspaces(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_keyspaces(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_keyspaces_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspaces failed: unknown result");
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspaces failed: unknown result"))
 
   def describe_cluster_name(self, ):
     """
     get the cluster name
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_cluster_name()
-    return self.recv_describe_cluster_name()
+    return d
 
   def send_describe_cluster_name(self, ):
-    self._oprot.writeMessageBegin('describe_cluster_name', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_cluster_name', TMessageType.CALL, self._seqid)
     args = describe_cluster_name_args()
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_cluster_name(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_cluster_name(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_cluster_name_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_cluster_name failed: unknown result");
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_cluster_name failed: unknown result"))
 
   def describe_version(self, ):
     """
     get the thrift api version
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_version()
-    return self.recv_describe_version()
+    return d
 
   def send_describe_version(self, ):
-    self._oprot.writeMessageBegin('describe_version', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_version', TMessageType.CALL, self._seqid)
     args = describe_version_args()
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_version(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_version(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_version_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_version failed: unknown result");
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_version failed: unknown result"))
 
   def describe_ring(self, keyspace):
     """
@@ -981,60 +1037,66 @@ class Client(Iface):
     Parameters:
      - keyspace
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_ring(keyspace)
-    return self.recv_describe_ring()
+    return d
 
   def send_describe_ring(self, keyspace):
-    self._oprot.writeMessageBegin('describe_ring', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_ring', TMessageType.CALL, self._seqid)
     args = describe_ring_args()
     args.keyspace = keyspace
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_ring(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_ring(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_ring_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_ring failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_ring failed: unknown result"))
 
   def describe_partitioner(self, ):
     """
     returns the partitioner used by this cluster
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_partitioner()
-    return self.recv_describe_partitioner()
+    return d
 
   def send_describe_partitioner(self, ):
-    self._oprot.writeMessageBegin('describe_partitioner', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_partitioner', TMessageType.CALL, self._seqid)
     args = describe_partitioner_args()
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_partitioner(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_partitioner(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_partitioner_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_partitioner failed: unknown result");
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_partitioner failed: unknown result"))
 
   def describe_keyspace(self, keyspace):
     """
@@ -1043,32 +1105,35 @@ class Client(Iface):
     Parameters:
      - keyspace
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_keyspace(keyspace)
-    return self.recv_describe_keyspace()
+    return d
 
   def send_describe_keyspace(self, keyspace):
-    self._oprot.writeMessageBegin('describe_keyspace', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_keyspace', TMessageType.CALL, self._seqid)
     args = describe_keyspace_args()
     args.keyspace = keyspace
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_keyspace(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_keyspace_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.nfe != None:
-      raise result.nfe
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspace failed: unknown result");
+      return d.errback(result.nfe)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspace failed: unknown result"))
 
   def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split):
     """
@@ -1085,34 +1150,37 @@ class Client(Iface):
      - end_token
      - keys_per_split
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_describe_splits(keyspace, cfName, start_token, end_token, keys_per_split)
-    return self.recv_describe_splits()
+    return d
 
   def send_describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split):
-    self._oprot.writeMessageBegin('describe_splits', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_splits', TMessageType.CALL, self._seqid)
     args = describe_splits_args()
     args.keyspace = keyspace
     args.cfName = cfName
     args.start_token = start_token
     args.end_token = end_token
     args.keys_per_split = keys_per_split
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_describe_splits(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_describe_splits(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = describe_splits_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "describe_splits failed: unknown result");
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_splits failed: unknown result"))
 
   def system_add_column_family(self, cf_def):
     """
@@ -1121,32 +1189,35 @@ class Client(Iface):
     Parameters:
      - cf_def
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_add_column_family(cf_def)
-    return self.recv_system_add_column_family()
+    return d
 
   def send_system_add_column_family(self, cf_def):
-    self._oprot.writeMessageBegin('system_add_column_family', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_add_column_family', TMessageType.CALL, self._seqid)
     args = system_add_column_family_args()
     args.cf_def = cf_def
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_add_column_family(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_add_column_family(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_add_column_family_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_add_column_family failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_add_column_family failed: unknown result"))
 
   def system_drop_column_family(self, column_family):
     """
@@ -1155,32 +1226,35 @@ class Client(Iface):
     Parameters:
      - column_family
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_drop_column_family(column_family)
-    return self.recv_system_drop_column_family()
+    return d
 
   def send_system_drop_column_family(self, column_family):
-    self._oprot.writeMessageBegin('system_drop_column_family', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_drop_column_family', TMessageType.CALL, self._seqid)
     args = system_drop_column_family_args()
     args.column_family = column_family
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_drop_column_family(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_drop_column_family(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_drop_column_family_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_column_family failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_column_family failed: unknown result"))
 
   def system_rename_column_family(self, old_name, new_name):
     """
@@ -1190,33 +1264,36 @@ class Client(Iface):
      - old_name
      - new_name
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_rename_column_family(old_name, new_name)
-    return self.recv_system_rename_column_family()
+    return d
 
   def send_system_rename_column_family(self, old_name, new_name):
-    self._oprot.writeMessageBegin('system_rename_column_family', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_rename_column_family', TMessageType.CALL, self._seqid)
     args = system_rename_column_family_args()
     args.old_name = old_name
     args.new_name = new_name
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_rename_column_family(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_rename_column_family(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_rename_column_family_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_column_family failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_column_family failed: unknown result"))
 
   def system_add_keyspace(self, ks_def):
     """
@@ -1225,32 +1302,35 @@ class Client(Iface):
     Parameters:
      - ks_def
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_add_keyspace(ks_def)
-    return self.recv_system_add_keyspace()
+    return d
 
   def send_system_add_keyspace(self, ks_def):
-    self._oprot.writeMessageBegin('system_add_keyspace', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_add_keyspace', TMessageType.CALL, self._seqid)
     args = system_add_keyspace_args()
     args.ks_def = ks_def
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_add_keyspace(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_add_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_add_keyspace_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_add_keyspace failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_add_keyspace failed: unknown result"))
 
   def system_drop_keyspace(self, keyspace):
     """
@@ -1259,32 +1339,35 @@ class Client(Iface):
     Parameters:
      - keyspace
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_drop_keyspace(keyspace)
-    return self.recv_system_drop_keyspace()
+    return d
 
   def send_system_drop_keyspace(self, keyspace):
-    self._oprot.writeMessageBegin('system_drop_keyspace', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_drop_keyspace', TMessageType.CALL, self._seqid)
     args = system_drop_keyspace_args()
     args.keyspace = keyspace
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_drop_keyspace(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_drop_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_drop_keyspace_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_keyspace failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_keyspace failed: unknown result"))
 
   def system_rename_keyspace(self, old_name, new_name):
     """
@@ -1294,38 +1377,43 @@ class Client(Iface):
      - old_name
      - new_name
     """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
     self.send_system_rename_keyspace(old_name, new_name)
-    return self.recv_system_rename_keyspace()
+    return d
 
   def send_system_rename_keyspace(self, old_name, new_name):
-    self._oprot.writeMessageBegin('system_rename_keyspace', TMessageType.CALL, self._seqid)
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_rename_keyspace', TMessageType.CALL, self._seqid)
     args = system_rename_keyspace_args()
     args.old_name = old_name
     args.new_name = new_name
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
 
-  def recv_system_rename_keyspace(self, ):
-    (fname, mtype, rseqid) = self._iprot.readMessageBegin()
+  def recv_system_rename_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
-      x.read(self._iprot)
-      self._iprot.readMessageEnd()
-      raise x
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
     result = system_rename_keyspace_result()
-    result.read(self._iprot)
-    self._iprot.readMessageEnd()
+    result.read(iprot)
+    iprot.readMessageEnd()
     if result.success != None:
-      return result.success
+      return d.callback(result.success)
     if result.ire != None:
-      raise result.ire
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_keyspace failed: unknown result");
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_keyspace failed: unknown result"))
 
 
-class Processor(Iface, TProcessor):
+class Processor(TProcessor):
+  implements(Iface)
+
   def __init__(self, handler):
-    self._handler = handler
+    self._handler = Iface(handler)
     self._processMap = {}
     self._processMap["login"] = Processor.process_login
     self._processMap["set_keyspace"] = Processor.process_set_keyspace
@@ -1365,18 +1453,30 @@ class Processor(Iface, TProcessor):
       x.write(oprot)
       oprot.writeMessageEnd()
       oprot.trans.flush()
-      return
+      return defer.succeed(None)
     else:
-      self._processMap[name](self, seqid, iprot, oprot)
-    return True
+      return self._processMap[name](self, seqid, iprot, oprot)
 
   def process_login(self, seqid, iprot, oprot):
     args = login_args()
     args.read(iprot)
     iprot.readMessageEnd()
     result = login_result()
+    d = defer.maybeDeferred(self._handler.login, args.auth_request)
+    d.addCallback(self.write_results_success_login, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_login, result, seqid, oprot)
+    return d
+
+  def write_results_success_login(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("login", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_login(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.login(args.auth_request)
+      error.raiseException()
     except AuthenticationException, authnx:
       result.authnx = authnx
     except AuthorizationException, authzx:
@@ -1391,8 +1491,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = set_keyspace_result()
+    d = defer.maybeDeferred(self._handler.set_keyspace, args.keyspace)
+    d.addCallback(self.write_results_success_set_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_set_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_set_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("set_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_set_keyspace(self, error, result, seqid, oprot):
     try:
-      self._handler.set_keyspace(args.keyspace)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("set_keyspace", TMessageType.REPLY, seqid)
@@ -1405,8 +1518,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = get_result()
+    d = defer.maybeDeferred(self._handler.get, args.key, args.column_path, args.consistency_level)
+    d.addCallback(self.write_results_success_get, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_get, result, seqid, oprot)
+    return d
+
+  def write_results_success_get(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("get", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_get(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.get(args.key, args.column_path, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except NotFoundException, nfe:
@@ -1425,8 +1551,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = get_slice_result()
+    d = defer.maybeDeferred(self._handler.get_slice, args.key, args.column_parent, args.predicate, args.consistency_level)
+    d.addCallback(self.write_results_success_get_slice, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_get_slice, result, seqid, oprot)
+    return d
+
+  def write_results_success_get_slice(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("get_slice", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_get_slice(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.get_slice(args.key, args.column_parent, args.predicate, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1443,8 +1582,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = get_count_result()
+    d = defer.maybeDeferred(self._handler.get_count, args.key, args.column_parent, args.predicate, args.consistency_level)
+    d.addCallback(self.write_results_success_get_count, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_get_count, result, seqid, oprot)
+    return d
+
+  def write_results_success_get_count(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("get_count", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_get_count(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.get_count(args.key, args.column_parent, args.predicate, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1461,8 +1613,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = multiget_slice_result()
+    d = defer.maybeDeferred(self._handler.multiget_slice, args.keys, args.column_parent, args.predicate, args.consistency_level)
+    d.addCallback(self.write_results_success_multiget_slice, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_multiget_slice, result, seqid, oprot)
+    return d
+
+  def write_results_success_multiget_slice(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("multiget_slice", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_multiget_slice(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.multiget_slice(args.keys, args.column_parent, args.predicate, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1479,8 +1644,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = multiget_count_result()
+    d = defer.maybeDeferred(self._handler.multiget_count, args.keyspace, args.keys, args.column_parent, args.predicate, args.consistency_level)
+    d.addCallback(self.write_results_success_multiget_count, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_multiget_count, result, seqid, oprot)
+    return d
+
+  def write_results_success_multiget_count(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("multiget_count", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_multiget_count(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.multiget_count(args.keyspace, args.keys, args.column_parent, args.predicate, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1497,8 +1675,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = get_range_slices_result()
+    d = defer.maybeDeferred(self._handler.get_range_slices, args.column_parent, args.predicate, args.range, args.consistency_level)
+    d.addCallback(self.write_results_success_get_range_slices, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_get_range_slices, result, seqid, oprot)
+    return d
+
+  def write_results_success_get_range_slices(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("get_range_slices", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_get_range_slices(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.get_range_slices(args.column_parent, args.predicate, args.range, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1515,8 +1706,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = get_indexed_slices_result()
+    d = defer.maybeDeferred(self._handler.get_indexed_slices, args.column_parent, args.index_clause, args.column_predicate, args.consistency_level)
+    d.addCallback(self.write_results_success_get_indexed_slices, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_get_indexed_slices, result, seqid, oprot)
+    return d
+
+  def write_results_success_get_indexed_slices(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("get_indexed_slices", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_get_indexed_slices(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.get_indexed_slices(args.column_parent, args.index_clause, args.column_predicate, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1533,8 +1737,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = insert_result()
+    d = defer.maybeDeferred(self._handler.insert, args.key, args.column_parent, args.column, args.consistency_level)
+    d.addCallback(self.write_results_success_insert, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_insert, result, seqid, oprot)
+    return d
+
+  def write_results_success_insert(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("insert", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_insert(self, error, result, seqid, oprot):
     try:
-      self._handler.insert(args.key, args.column_parent, args.column, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1551,8 +1768,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = remove_result()
+    d = defer.maybeDeferred(self._handler.remove, args.key, args.column_path, args.clock, args.consistency_level)
+    d.addCallback(self.write_results_success_remove, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_remove, result, seqid, oprot)
+    return d
+
+  def write_results_success_remove(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("remove", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_remove(self, error, result, seqid, oprot):
     try:
-      self._handler.remove(args.key, args.column_path, args.clock, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1569,8 +1799,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = batch_mutate_result()
+    d = defer.maybeDeferred(self._handler.batch_mutate, args.mutation_map, args.consistency_level)
+    d.addCallback(self.write_results_success_batch_mutate, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_batch_mutate, result, seqid, oprot)
+    return d
+
+  def write_results_success_batch_mutate(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("batch_mutate", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_batch_mutate(self, error, result, seqid, oprot):
     try:
-      self._handler.batch_mutate(args.mutation_map, args.consistency_level)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1587,8 +1830,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = truncate_result()
+    d = defer.maybeDeferred(self._handler.truncate, args.cfname)
+    d.addCallback(self.write_results_success_truncate, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_truncate, result, seqid, oprot)
+    return d
+
+  def write_results_success_truncate(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("truncate", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_truncate(self, error, result, seqid, oprot):
     try:
-      self._handler.truncate(args.cfname)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     except UnavailableException, ue:
@@ -1603,8 +1859,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = check_schema_agreement_result()
+    d = defer.maybeDeferred(self._handler.check_schema_agreement, )
+    d.addCallback(self.write_results_success_check_schema_agreement, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_check_schema_agreement, result, seqid, oprot)
+    return d
+
+  def write_results_success_check_schema_agreement(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("check_schema_agreement", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_check_schema_agreement(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.check_schema_agreement()
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("check_schema_agreement", TMessageType.REPLY, seqid)
@@ -1617,7 +1886,12 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_keyspaces_result()
-    result.success = self._handler.describe_keyspaces()
+    d = defer.maybeDeferred(self._handler.describe_keyspaces, )
+    d.addCallback(self.write_results_success_describe_keyspaces, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_keyspaces(self, success, result, seqid, oprot):
+    result.success = success
     oprot.writeMessageBegin("describe_keyspaces", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1628,7 +1902,12 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_cluster_name_result()
-    result.success = self._handler.describe_cluster_name()
+    d = defer.maybeDeferred(self._handler.describe_cluster_name, )
+    d.addCallback(self.write_results_success_describe_cluster_name, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_cluster_name(self, success, result, seqid, oprot):
+    result.success = success
     oprot.writeMessageBegin("describe_cluster_name", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1639,7 +1918,12 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_version_result()
-    result.success = self._handler.describe_version()
+    d = defer.maybeDeferred(self._handler.describe_version, )
+    d.addCallback(self.write_results_success_describe_version, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_version(self, success, result, seqid, oprot):
+    result.success = success
     oprot.writeMessageBegin("describe_version", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1650,8 +1934,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_ring_result()
+    d = defer.maybeDeferred(self._handler.describe_ring, args.keyspace)
+    d.addCallback(self.write_results_success_describe_ring, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_describe_ring, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_ring(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("describe_ring", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_describe_ring(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.describe_ring(args.keyspace)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("describe_ring", TMessageType.REPLY, seqid)
@@ -1664,7 +1961,12 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_partitioner_result()
-    result.success = self._handler.describe_partitioner()
+    d = defer.maybeDeferred(self._handler.describe_partitioner, )
+    d.addCallback(self.write_results_success_describe_partitioner, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_partitioner(self, success, result, seqid, oprot):
+    result.success = success
     oprot.writeMessageBegin("describe_partitioner", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1675,8 +1977,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_keyspace_result()
+    d = defer.maybeDeferred(self._handler.describe_keyspace, args.keyspace)
+    d.addCallback(self.write_results_success_describe_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_describe_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("describe_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_describe_keyspace(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.describe_keyspace(args.keyspace)
+      error.raiseException()
     except NotFoundException, nfe:
       result.nfe = nfe
     oprot.writeMessageBegin("describe_keyspace", TMessageType.REPLY, seqid)
@@ -1689,7 +2004,12 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_splits_result()
-    result.success = self._handler.describe_splits(args.keyspace, args.cfName, args.start_token, args.end_token, args.keys_per_split)
+    d = defer.maybeDeferred(self._handler.describe_splits, args.keyspace, args.cfName, args.start_token, args.end_token, args.keys_per_split)
+    d.addCallback(self.write_results_success_describe_splits, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_splits(self, success, result, seqid, oprot):
+    result.success = success
     oprot.writeMessageBegin("describe_splits", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1700,8 +2020,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_add_column_family_result()
+    d = defer.maybeDeferred(self._handler.system_add_column_family, args.cf_def)
+    d.addCallback(self.write_results_success_system_add_column_family, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_add_column_family, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_add_column_family(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_add_column_family", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_add_column_family(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_add_column_family(args.cf_def)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_add_column_family", TMessageType.REPLY, seqid)
@@ -1714,8 +2047,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_drop_column_family_result()
+    d = defer.maybeDeferred(self._handler.system_drop_column_family, args.column_family)
+    d.addCallback(self.write_results_success_system_drop_column_family, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_drop_column_family, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_drop_column_family(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_drop_column_family", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_drop_column_family(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_drop_column_family(args.column_family)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_drop_column_family", TMessageType.REPLY, seqid)
@@ -1728,8 +2074,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_rename_column_family_result()
+    d = defer.maybeDeferred(self._handler.system_rename_column_family, args.old_name, args.new_name)
+    d.addCallback(self.write_results_success_system_rename_column_family, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_rename_column_family, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_rename_column_family(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_rename_column_family", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_rename_column_family(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_rename_column_family(args.old_name, args.new_name)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_rename_column_family", TMessageType.REPLY, seqid)
@@ -1742,8 +2101,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_add_keyspace_result()
+    d = defer.maybeDeferred(self._handler.system_add_keyspace, args.ks_def)
+    d.addCallback(self.write_results_success_system_add_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_add_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_add_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_add_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_add_keyspace(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_add_keyspace(args.ks_def)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_add_keyspace", TMessageType.REPLY, seqid)
@@ -1756,8 +2128,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_drop_keyspace_result()
+    d = defer.maybeDeferred(self._handler.system_drop_keyspace, args.keyspace)
+    d.addCallback(self.write_results_success_system_drop_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_drop_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_drop_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_drop_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_drop_keyspace(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_drop_keyspace(args.keyspace)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_drop_keyspace", TMessageType.REPLY, seqid)
@@ -1770,8 +2155,21 @@ class Processor(Iface, TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = system_rename_keyspace_result()
+    d = defer.maybeDeferred(self._handler.system_rename_keyspace, args.old_name, args.new_name)
+    d.addCallback(self.write_results_success_system_rename_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_rename_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_rename_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_rename_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_rename_keyspace(self, error, result, seqid, oprot):
     try:
-      result.success = self._handler.system_rename_keyspace(args.old_name, args.new_name)
+      error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_rename_keyspace", TMessageType.REPLY, seqid)
@@ -4265,7 +4663,7 @@ class describe_keyspaces_result:
   """
 
   thrift_spec = (
-    (0, TType.SET, 'success', (TType.STRING,None), None, ), # 0
+    (0, TType.LIST, 'success', (TType.STRUCT,(KsDef, KsDef.thrift_spec)), None, ), # 0
   )
 
   def __init__(self, success=None,):
@@ -4281,13 +4679,14 @@ class describe_keyspaces_result:
       if ftype == TType.STOP:
         break
       if fid == 0:
-        if ftype == TType.SET:
-          self.success = set()
-          (_etype171, _size168) = iprot.readSetBegin()
+        if ftype == TType.LIST:
+          self.success = []
+          (_etype171, _size168) = iprot.readListBegin()
           for _i172 in xrange(_size168):
-            _elem173 = iprot.readString();
-            self.success.add(_elem173)
-          iprot.readSetEnd()
+            _elem173 = KsDef()
+            _elem173.read(iprot)
+            self.success.append(_elem173)
+          iprot.readListEnd()
         else:
           iprot.skip(ftype)
       else:
@@ -4301,11 +4700,11 @@ class describe_keyspaces_result:
       return
     oprot.writeStructBegin('describe_keyspaces_result')
     if self.success != None:
-      oprot.writeFieldBegin('success', TType.SET, 0)
-      oprot.writeSetBegin(TType.STRING, len(self.success))
+      oprot.writeFieldBegin('success', TType.LIST, 0)
+      oprot.writeListBegin(TType.STRUCT, len(self.success))
       for iter174 in self.success:
-        oprot.writeString(iter174)
-      oprot.writeSetEnd()
+        iter174.write(oprot)
+      oprot.writeListEnd()
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
@@ -4797,7 +5196,7 @@ class describe_keyspace_result:
   """
 
   thrift_spec = (
-    (0, TType.MAP, 'success', (TType.STRING,None,TType.MAP,(TType.STRING,None,TType.STRING,None)), None, ), # 0
+    (0, TType.STRUCT, 'success', (KsDef, KsDef.thrift_spec), None, ), # 0
     (1, TType.STRUCT, 'nfe', (NotFoundException, NotFoundException.thrift_spec), None, ), # 1
   )
 
@@ -4815,20 +5214,9 @@ class describe_keyspace_result:
       if ftype == TType.STOP:
         break
       if fid == 0:
-        if ftype == TType.MAP:
-          self.success = {}
-          (_ktype183, _vtype184, _size182 ) = iprot.readMapBegin() 
-          for _i186 in xrange(_size182):
-            _key187 = iprot.readString();
-            _val188 = {}
-            (_ktype190, _vtype191, _size189 ) = iprot.readMapBegin() 
-            for _i193 in xrange(_size189):
-              _key194 = iprot.readString();
-              _val195 = iprot.readString();
-              _val188[_key194] = _val195
-            iprot.readMapEnd()
-            self.success[_key187] = _val188
-          iprot.readMapEnd()
+        if ftype == TType.STRUCT:
+          self.success = KsDef()
+          self.success.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 1:
@@ -4848,16 +5236,8 @@ class describe_keyspace_result:
       return
     oprot.writeStructBegin('describe_keyspace_result')
     if self.success != None:
-      oprot.writeFieldBegin('success', TType.MAP, 0)
-      oprot.writeMapBegin(TType.STRING, TType.MAP, len(self.success))
-      for kiter196,viter197 in self.success.items():
-        oprot.writeString(kiter196)
-        oprot.writeMapBegin(TType.STRING, TType.STRING, len(viter197))
-        for kiter198,viter199 in viter197.items():
-          oprot.writeString(kiter198)
-          oprot.writeString(viter199)
-        oprot.writeMapEnd()
-      oprot.writeMapEnd()
+      oprot.writeFieldBegin('success', TType.STRUCT, 0)
+      self.success.write(oprot)
       oprot.writeFieldEnd()
     if self.nfe != None:
       oprot.writeFieldBegin('nfe', TType.STRUCT, 1)
@@ -5006,10 +5386,10 @@ class describe_splits_result:
       if fid == 0:
         if ftype == TType.LIST:
           self.success = []
-          (_etype203, _size200) = iprot.readListBegin()
-          for _i204 in xrange(_size200):
-            _elem205 = iprot.readString();
-            self.success.append(_elem205)
+          (_etype185, _size182) = iprot.readListBegin()
+          for _i186 in xrange(_size182):
+            _elem187 = iprot.readString();
+            self.success.append(_elem187)
           iprot.readListEnd()
         else:
           iprot.skip(ftype)
@@ -5026,8 +5406,8 @@ class describe_splits_result:
     if self.success != None:
       oprot.writeFieldBegin('success', TType.LIST, 0)
       oprot.writeListBegin(TType.STRING, len(self.success))
-      for iter206 in self.success:
-        oprot.writeString(iter206)
+      for iter188 in self.success:
+        oprot.writeString(iter188)
       oprot.writeListEnd()
       oprot.writeFieldEnd()
     oprot.writeFieldStop()

@@ -58,9 +58,10 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             raise ClientBusy
         
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
-    def __init__(self, client_class, credentials, iprot_factory, oprot_factory=None):
+    def __init__(self, client_class, keyspace, credentials, iprot_factory, oprot_factory=None):
         TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
         self.deferred = None
+        self.keyspace = keyspace
         self.credentials = credentials
         
     def connectionMade(self):
@@ -111,9 +112,14 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
 
     def buildProtocol(self, addr):
         if self.credentials:
-            p = self.protocol(Cassandra.Client, self.credentials, self.thriftFactory()))
+            p = self.protocol(Cassandra.Client,
+                              self.keyspace,
+                              self.credentials,
+                              self.thriftFactory())
         else:
-            p = self.protocol(Cassandra.Client, self.thriftFactory())
+            p = self.protocol(Cassandra.Client,
+                              self.keyspace,
+                              self.thriftFactory())
         p.factory = self
         self.resetDelay()
         return p

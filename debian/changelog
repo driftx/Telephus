@@ -1,3 +1,11 @@
+python-telephus (0.7~beta1) unstable; urgency=low
+
+  * Add describe_version
+  * Update to work with Cassandra 0.7.x HEAD r985573
+  * Merge updates from Paul Cannon
+
+ -- Brandon Williams <brandon@riptano.com>  Sun, 15 Aug 2010 08:40:00 +0000
+
 python-telephus (0.6.2) unstable; urgency=low
 
   * Fix double errbacks

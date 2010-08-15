@@ -40,7 +40,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print '  string describe_version()'
   print '   describe_ring(string keyspace)'
   print '  string describe_partitioner()'
-  print '   describe_keyspace(string keyspace)'
+  print '  KsDef describe_keyspace(string keyspace)'
   print '   describe_splits(string keyspace, string cfName, string start_token, string end_token, i32 keys_per_split)'
   print '  string system_add_column_family(CfDef cf_def)'
   print '  string system_drop_column_family(string column_family)'
