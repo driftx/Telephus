@@ -37,9 +37,9 @@ class CassandraClientTest(unittest.TestCase):
     
     @defer.inlineCallbacks
     def test_insert_get(self): 
-        yield self.client.insert('test', ColumnPath(CF, None, COLUMN), 'testval')
+        yield self.client.insert('test', CF, 'testval', column=COLUMN)
         yield self.client.insert('test2', CF, 'testval2', column=COLUMN)
-        yield self.client.insert('test', ColumnPath(SCF, SCOLUMN, COLUMN), 'superval')
+        yield self.client.insert('test', SCF, 'superval', column=COLUMN, super_column=SCOLUMN)
         yield self.client.insert('test2', SCF, 'superval2', column=COLUMN,
                                  super_column=SCOLUMN)
         res = yield self.client.get('test', CF, column=COLUMN)
