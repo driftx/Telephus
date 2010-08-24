@@ -233,11 +233,11 @@ class CassandraClient(object):
     # TODO: make friendly
     def system_add_column_family(self, cfDef, retries=None):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
-        return self.manager.pushRequest(req, cfDef, retries=reties)
+        return self.manager.pushRequest(req, retries=retries)
     
     def system_add_keyspace(self, ksDef, retries=None):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
-        return self.manager.pushRequest(req, ksDef, retries=retries)
+        return self.manager.pushRequest(req, retries=retries)
 
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')
