@@ -18,7 +18,7 @@ class ManagedThriftRequest(object):
         self.args = args
 
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
-    def __init__(self, client_class, keyspace, iprot_factory, oprot_factory=None):
+    def __init__(self, client_class, iprot_factory, oprot_factory=None, keyspace=None):
         TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
         self.deferred = None
         self.keyspace = keyspace
@@ -26,11 +26,14 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.client.protocol = self
-        d = self.client.set_keyspace(self.keyspace)
-        def keyspaceok(res):
-            self.factory.clientIdle(self, res)
-        d.addCallback(keyspaceok)
-        d.addErrback(self.factory.clientConnectionFailed, self)
+        if self.keyspace:
+            d = self.client.set_keyspace(self.keyspace)
+            def keyspaceok(res):
+                self.factory.clientIdle(self, res)
+            d.addCallback(keyspaceok)
+            d.addErrback(self.factory.clientConnectionFailed, self)
+        else: 
+            self.factory.clientIdle(self)
         
     def connectionLost(self, reason=None):
         try:
@@ -78,7 +81,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, keyspace, retries=0, credentials={}):
+    def __init__(self, keyspace=None, retries=0, credentials={}):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
@@ -118,14 +121,22 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                               self.thriftFactory())
         else:
             p = self.protocol(Cassandra.Client,
-                              self.keyspace,
-                              self.thriftFactory())
+                              self.thriftFactory(),
+                              keyspace=self.keyspace)
         p.factory = self
         self.resetDelay()
         return p
 
     def clientGone(self, proto):
         self._protos.remove(proto)
+        
+    def set_keyspace(self, keyspace):
+        """ switch all connections to another keyspace """
+        self.keyspace = keyspace
+        dfrds = []
+        for p in self._protos:
+            dfrds.append(p.submitRequest(ManagedThriftRequest('set_keyspace', keyspace)))
+        return defer.gatherResults(dfrds)
             
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
@@ -153,7 +164,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                                callbackArgs=[deferred],
                                errbackArgs=[request, deferred, retries])
         return self.queue.get().addCallback(_process)
-        
+    
     def pushRequest(self, request, retries=None):
         retries = retries or self.request_retries
         d = defer.Deferred()

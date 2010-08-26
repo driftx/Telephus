@@ -172,7 +172,10 @@ class CassandraClient(object):
         else:
             raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
         return colsorsupers
-        
+    
+    def set_keyspace(self, keyspace):
+        return self.manager.set_keyspace(keyspace)
+    
     def describe_keyspaces(self, retries=None):
         req = ManagedThriftRequest('describe_keyspaces')
         return self.manager.pushRequest(req, retries=retries)

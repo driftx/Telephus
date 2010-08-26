@@ -18,7 +18,7 @@ SCOLUMN = 'bar'
 
 class CassandraClientTest(unittest.TestCase):
     def setUp(self):
-        self.cmanager = ManagedCassandraClientFactory(KEYSPACE)
+        self.cmanager = ManagedCassandraClientFactory(keyspace=KEYSPACE)
         self.client = CassandraClient(self.cmanager)
         for i in xrange(CONNS):
             reactor.connectTCP(HOST, PORT, self.cmanager)
