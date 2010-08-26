@@ -22,6 +22,7 @@ class CassandraClient(object):
             return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
+        
     def _mkpred(self, names, start, finish, reverse, count):
         if names:
             srange = None
@@ -172,14 +173,6 @@ class CassandraClient(object):
             raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
         return colsorsupers
         
-    def get_string_property(self, name, retries=None):
-        req = ManagedThriftRequest('get_string_property', name)
-        return self.manager.pushRequest(req, retries=retries)
-
-    def get_string_list_property(self, name, retries=None):
-        req = ManagedThriftRequest('get_string_list_property', name)
-        return self.manager.pushRequest(req, retries=retries)
-
     def describe_keyspaces(self, retries=None):
         req = ManagedThriftRequest('describe_keyspaces')
         return self.manager.pushRequest(req, retries=retries)
@@ -212,7 +205,7 @@ class CassandraClient(object):
     
     def check_schema_agreement(self, retries=None):
         req = ManagedThriftRequest('check_schema_agreement')
-        self.manager.pushRequest(req, retries=retries)
+        return self.manager.pushRequest(req, retries=retries)
     
     def system_drop_column_family(self, cfName, retries=None):
         req = ManagedThriftRequest('system_drop_column_family', cfName)
