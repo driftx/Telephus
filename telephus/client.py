@@ -12,13 +12,13 @@ class CassandraClient(object):
         return Clock(timestamp=int(time.time() * 1000000))
     
     def _getparent(self, columnParentOrCF, super_column=None):
-        if isinstance(columnParentOrCF, str):
+        if isinstance(columnParentOrCF, basestring):
             return ColumnParent(columnParentOrCF, super_column=super_column)
         else:
             return columnParentOrCF
         
     def _getpath(self, columnPathOrCF, col, super_column=None):
-        if isinstance(columnPathOrCF, str):
+        if isinstance(columnPathOrCF, basestring):
             return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
@@ -232,11 +232,11 @@ class CassandraClient(object):
     # TODO: make friendly
     def system_add_column_family(self, cfDef, retries=None):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
-        return self.manager.pushRequest(req, cfDef, retries=reties)
+        return self.manager.pushRequest(req, retries=retries)
     
     def system_add_keyspace(self, ksDef, retries=None):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
-        return self.manager.pushRequest(req, ksDef, retries=retries)
+        return self.manager.pushRequest(req, retries=retries)
 
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')
