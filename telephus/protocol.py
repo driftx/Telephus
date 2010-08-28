@@ -137,6 +137,14 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         for p in self._protos:
             dfrds.append(p.submitRequest(ManagedThriftRequest('set_keyspace', keyspace)))
         return defer.gatherResults(dfrds)
+    
+    def login(self, credentials):
+        """ authenticate all connections """
+        dfrds = []
+        for p in self._protos:
+            dfrds.append(p.submitRequest(ManagedThriftRequest('login',
+                    AuthenticationRequest(credentials=credentials))))
+        return defer.gatherResults(dfrds)
             
     def submitRequest(self, proto):
         def reqError(err, req, d, r):

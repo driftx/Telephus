@@ -176,6 +176,9 @@ class CassandraClient(object):
     def set_keyspace(self, keyspace):
         return self.manager.set_keyspace(keyspace)
     
+    def login(self, credentials):
+        return self.manager.login(credentials)
+    
     def describe_keyspaces(self, retries=None):
         req = ManagedThriftRequest('describe_keyspaces')
         return self.manager.pushRequest(req, retries=retries)
