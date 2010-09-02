@@ -1,3 +1,21 @@
+python-telephus (0.7~beta2) unstable; urgency=low
+
+  * Additional fixes by Brandon Williams <brandon@riptano.com>:
+    + Allow authentication of all connections
+    + Allow switching all connections to a different keyspace
+    + Remove get_string calls
+    + get_count accepts a predicate
+    + Abstract predicate generation, multiget uses multiget_slice
+    + Fix broken tests
+    + Fix insert params
+    + Wrap default timestamp in a Clock, use microseconds
+    + Errback when submitRequest raises an exception
+  * Additional fixes by paul cannon <paul@riptano.com>:
+    + work when CF names are given as unicode objects
+    + fix system_add_column_family, system_add_keyspace
+
+ -- paul cannon <paul@riptano.com>  Thu, 02 Sep 2010 12:25:43 -0600
+
 python-telephus (0.7~beta1) unstable; urgency=low
 
   * Add describe_version
