@@ -209,8 +209,8 @@ class CassandraClient(object):
         req = ManagedThriftRequest('truncate', cfName)
         return self.manager.pushRequest(req, retries=retries)
     
-    def check_schema_agreement(self, retries=None):
-        req = ManagedThriftRequest('check_schema_agreement')
+    def describe_schema_versions(self, retries=None):
+        req = ManagedThriftRequest('describe_schema_versions')
         return self.manager.pushRequest(req, retries=retries)
     
     def system_drop_column_family(self, cfName, retries=None):
