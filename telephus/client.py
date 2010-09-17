@@ -60,6 +60,14 @@ class CassandraClient(object):
         req = ManagedThriftRequest('multiget_slice', keys, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
     
+    def multiget_count(self, keys, columnParent, super_column=None, start='', finish='',
+                  consistency=None, retries=None):    
+        cp = self._getparent(columnParent, super_column)
+        pred = self._mkpred(None, start, finish, False, 2147483647)
+        consistency = consistency or self.consistency
+        req = ManagedThriftRequest('multiget_count', keys, cp, pred, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+    
     def get_count(self, key, columnParent, super_column=None, start='', finish='',
                   consistency=None, retries=None):    
         cp = self._getparent(columnParent, super_column)
@@ -199,9 +207,9 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_ring', keyspace)
         return self.manager.pushRequest(req, retries=retries)
     
-    def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split,
+    def describe_splits(self, cfName, start_token, end_token, keys_per_split,
                         retries=None):
-        req = ManagedThriftRequest('describe_splits', keyspace, cfName, start_token,
+        req = ManagedThriftRequest('describe_splits', cfName, start_token,
                                    end_token, keys_per_split)
         return self.manager.pushRequest(req, retries=retries)
     
@@ -234,8 +242,16 @@ class CassandraClient(object):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
         return self.manager.pushRequest(req, retries=retries)
     
+    def system_update_column_family(self, cfDef, retries=None):
+        req = ManagedThriftRequest('system_update_column_family', cfDef)
+        return self.manager.pushRequest(req, retries=retries)
+    
     def system_add_keyspace(self, ksDef, retries=None):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
+        return self.manager.pushRequest(req, retries=retries)
+    
+    def system_update_keyspace(self, ksDef, retries=None):
+        req = ManagedThriftRequest('system_update_keyspace', ksDef)
         return self.manager.pushRequest(req, retries=retries)
 
     def describe_version(self, retries=None):
