@@ -83,12 +83,11 @@ class Iface(Interface):
     """
     pass
 
-  def multiget_count(keyspace, keys, column_parent, predicate, consistency_level):
+  def multiget_count(keys, column_parent, predicate, consistency_level):
     """
     Perform a get_count in parallel on the given list<binary> keys. The return value maps keys to the count found.
     
     Parameters:
-     - keyspace
      - keys
      - column_parent
      - predicate
@@ -173,11 +172,11 @@ class Iface(Interface):
     """
     pass
 
-  def check_schema_agreement():
+  def describe_schema_versions():
     """
-    ask the cluster if they all are using the same migration id. returns a map of version->hosts-on-that-version.
-    hosts that did not respond will be under the key DatabaseDescriptor.INITIAL_VERSION. agreement can be determined
-    by checking if the size of the map is 1.
+    for each schema version present in the cluster, returns a list of nodes at that version.
+    hosts that do not respond will be under the key DatabaseDescriptor.INITIAL_VERSION.
+    the cluster is all on the same version if the size of the map is 1.
     """
     pass
 
@@ -230,7 +229,7 @@ class Iface(Interface):
     """
     pass
 
-  def describe_splits(keyspace, cfName, start_token, end_token, keys_per_split):
+  def describe_splits(cfName, start_token, end_token, keys_per_split):
     """
     experimental API for hadoop/parallel query support.
     may change violently and without warning.
@@ -239,7 +238,6 @@ class Iface(Interface):
     next is (list[1], list[2]], etc.
     
     Parameters:
-     - keyspace
      - cfName
      - start_token
      - end_token
@@ -303,6 +301,24 @@ class Iface(Interface):
     """
     pass
 
+  def system_update_keyspace(ks_def):
+    """
+    updates properties of a keyspace. returns the new schema id.
+    
+    Parameters:
+     - ks_def
+    """
+    pass
+
+  def system_update_column_family(cf_def):
+    """
+    updates properties of a column family. returns the new schema id.
+    
+    Parameters:
+     - cf_def
+    """
+    pass
+
 
 class Client:
   implements(Iface)
@@ -342,13 +358,11 @@ class Client:
     result = login_result()
     result.read(iprot)
     iprot.readMessageEnd()
-    if result.success != None:
-      return d.callback(result.success)
     if result.authnx != None:
       return d.errback(result.authnx)
     if result.authzx != None:
       return d.errback(result.authzx)
-    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "login failed: unknown result"))
+    return d.callback(None)
 
   def set_keyspace(self, keyspace):
     """
@@ -574,12 +588,11 @@ class Client:
       return d.errback(result.te)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "multiget_slice failed: unknown result"))
 
-  def multiget_count(self, keyspace, keys, column_parent, predicate, consistency_level):
+  def multiget_count(self, keys, column_parent, predicate, consistency_level):
     """
     Perform a get_count in parallel on the given list<binary> keys. The return value maps keys to the count found.
     
     Parameters:
-     - keyspace
      - keys
      - column_parent
      - predicate
@@ -587,14 +600,13 @@ class Client:
     """
     self._seqid += 1
     d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_multiget_count(keyspace, keys, column_parent, predicate, consistency_level)
+    self.send_multiget_count(keys, column_parent, predicate, consistency_level)
     return d
 
-  def send_multiget_count(self, keyspace, keys, column_parent, predicate, consistency_level):
+  def send_multiget_count(self, keys, column_parent, predicate, consistency_level):
     oprot = self._oprot_factory.getProtocol(self._transport)
     oprot.writeMessageBegin('multiget_count', TMessageType.CALL, self._seqid)
     args = multiget_count_args()
-    args.keyspace = keyspace
     args.keys = keys
     args.column_parent = column_parent
     args.predicate = predicate
@@ -895,40 +907,40 @@ class Client:
       return d.errback(result.ue)
     return d.callback(None)
 
-  def check_schema_agreement(self, ):
+  def describe_schema_versions(self, ):
     """
-    ask the cluster if they all are using the same migration id. returns a map of version->hosts-on-that-version.
-    hosts that did not respond will be under the key DatabaseDescriptor.INITIAL_VERSION. agreement can be determined
-    by checking if the size of the map is 1.
+    for each schema version present in the cluster, returns a list of nodes at that version.
+    hosts that do not respond will be under the key DatabaseDescriptor.INITIAL_VERSION.
+    the cluster is all on the same version if the size of the map is 1.
     """
     self._seqid += 1
     d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_check_schema_agreement()
+    self.send_describe_schema_versions()
     return d
 
-  def send_check_schema_agreement(self, ):
+  def send_describe_schema_versions(self, ):
     oprot = self._oprot_factory.getProtocol(self._transport)
-    oprot.writeMessageBegin('check_schema_agreement', TMessageType.CALL, self._seqid)
-    args = check_schema_agreement_args()
+    oprot.writeMessageBegin('describe_schema_versions', TMessageType.CALL, self._seqid)
+    args = describe_schema_versions_args()
     args.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
 
-  def recv_check_schema_agreement(self, iprot, mtype, rseqid):
+  def recv_describe_schema_versions(self, iprot, mtype, rseqid):
     d = self._reqs.pop(rseqid)
     if mtype == TMessageType.EXCEPTION:
       x = TApplicationException()
       x.read(iprot)
       iprot.readMessageEnd()
       return d.errback(x)
-    result = check_schema_agreement_result()
+    result = describe_schema_versions_result()
     result.read(iprot)
     iprot.readMessageEnd()
     if result.success != None:
       return d.callback(result.success)
     if result.ire != None:
       return d.errback(result.ire)
-    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "check_schema_agreement failed: unknown result"))
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_schema_versions failed: unknown result"))
 
   def describe_keyspaces(self, ):
     """
@@ -1135,7 +1147,7 @@ class Client:
       return d.errback(result.nfe)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspace failed: unknown result"))
 
-  def describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split):
+  def describe_splits(self, cfName, start_token, end_token, keys_per_split):
     """
     experimental API for hadoop/parallel query support.
     may change violently and without warning.
@@ -1144,7 +1156,6 @@ class Client:
     next is (list[1], list[2]], etc.
     
     Parameters:
-     - keyspace
      - cfName
      - start_token
      - end_token
@@ -1152,14 +1163,13 @@ class Client:
     """
     self._seqid += 1
     d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_describe_splits(keyspace, cfName, start_token, end_token, keys_per_split)
+    self.send_describe_splits(cfName, start_token, end_token, keys_per_split)
     return d
 
-  def send_describe_splits(self, keyspace, cfName, start_token, end_token, keys_per_split):
+  def send_describe_splits(self, cfName, start_token, end_token, keys_per_split):
     oprot = self._oprot_factory.getProtocol(self._transport)
     oprot.writeMessageBegin('describe_splits', TMessageType.CALL, self._seqid)
     args = describe_splits_args()
-    args.keyspace = keyspace
     args.cfName = cfName
     args.start_token = start_token
     args.end_token = end_token
@@ -1408,6 +1418,80 @@ class Client:
       return d.errback(result.ire)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_keyspace failed: unknown result"))
 
+  def system_update_keyspace(self, ks_def):
+    """
+    updates properties of a keyspace. returns the new schema id.
+    
+    Parameters:
+     - ks_def
+    """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
+    self.send_system_update_keyspace(ks_def)
+    return d
+
+  def send_system_update_keyspace(self, ks_def):
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_update_keyspace', TMessageType.CALL, self._seqid)
+    args = system_update_keyspace_args()
+    args.ks_def = ks_def
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def recv_system_update_keyspace(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
+    result = system_update_keyspace_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.success != None:
+      return d.callback(result.success)
+    if result.ire != None:
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_update_keyspace failed: unknown result"))
+
+  def system_update_column_family(self, cf_def):
+    """
+    updates properties of a column family. returns the new schema id.
+    
+    Parameters:
+     - cf_def
+    """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
+    self.send_system_update_column_family(cf_def)
+    return d
+
+  def send_system_update_column_family(self, cf_def):
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('system_update_column_family', TMessageType.CALL, self._seqid)
+    args = system_update_column_family_args()
+    args.cf_def = cf_def
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def recv_system_update_column_family(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
+    result = system_update_column_family_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.success != None:
+      return d.callback(result.success)
+    if result.ire != None:
+      return d.errback(result.ire)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_update_column_family failed: unknown result"))
+
 
 class Processor(TProcessor):
   implements(Iface)
@@ -1428,7 +1512,7 @@ class Processor(TProcessor):
     self._processMap["remove"] = Processor.process_remove
     self._processMap["batch_mutate"] = Processor.process_batch_mutate
     self._processMap["truncate"] = Processor.process_truncate
-    self._processMap["check_schema_agreement"] = Processor.process_check_schema_agreement
+    self._processMap["describe_schema_versions"] = Processor.process_describe_schema_versions
     self._processMap["describe_keyspaces"] = Processor.process_describe_keyspaces
     self._processMap["describe_cluster_name"] = Processor.process_describe_cluster_name
     self._processMap["describe_version"] = Processor.process_describe_version
@@ -1442,6 +1526,8 @@ class Processor(TProcessor):
     self._processMap["system_add_keyspace"] = Processor.process_system_add_keyspace
     self._processMap["system_drop_keyspace"] = Processor.process_system_drop_keyspace
     self._processMap["system_rename_keyspace"] = Processor.process_system_rename_keyspace
+    self._processMap["system_update_keyspace"] = Processor.process_system_update_keyspace
+    self._processMap["system_update_column_family"] = Processor.process_system_update_column_family
 
   def process(self, iprot, oprot):
     (name, type, seqid) = iprot.readMessageBegin()
@@ -1644,7 +1730,7 @@ class Processor(TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = multiget_count_result()
-    d = defer.maybeDeferred(self._handler.multiget_count, args.keyspace, args.keys, args.column_parent, args.predicate, args.consistency_level)
+    d = defer.maybeDeferred(self._handler.multiget_count, args.keys, args.column_parent, args.predicate, args.consistency_level)
     d.addCallback(self.write_results_success_multiget_count, result, seqid, oprot)
     d.addErrback(self.write_results_exception_multiget_count, result, seqid, oprot)
     return d
@@ -1854,29 +1940,29 @@ class Processor(TProcessor):
     oprot.writeMessageEnd()
     oprot.trans.flush()
 
-  def process_check_schema_agreement(self, seqid, iprot, oprot):
-    args = check_schema_agreement_args()
+  def process_describe_schema_versions(self, seqid, iprot, oprot):
+    args = describe_schema_versions_args()
     args.read(iprot)
     iprot.readMessageEnd()
-    result = check_schema_agreement_result()
-    d = defer.maybeDeferred(self._handler.check_schema_agreement, )
-    d.addCallback(self.write_results_success_check_schema_agreement, result, seqid, oprot)
-    d.addErrback(self.write_results_exception_check_schema_agreement, result, seqid, oprot)
+    result = describe_schema_versions_result()
+    d = defer.maybeDeferred(self._handler.describe_schema_versions, )
+    d.addCallback(self.write_results_success_describe_schema_versions, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_describe_schema_versions, result, seqid, oprot)
     return d
 
-  def write_results_success_check_schema_agreement(self, success, result, seqid, oprot):
+  def write_results_success_describe_schema_versions(self, success, result, seqid, oprot):
     result.success = success
-    oprot.writeMessageBegin("check_schema_agreement", TMessageType.REPLY, seqid)
+    oprot.writeMessageBegin("describe_schema_versions", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
 
-  def write_results_exception_check_schema_agreement(self, error, result, seqid, oprot):
+  def write_results_exception_describe_schema_versions(self, error, result, seqid, oprot):
     try:
       error.raiseException()
     except InvalidRequestException, ire:
       result.ire = ire
-    oprot.writeMessageBegin("check_schema_agreement", TMessageType.REPLY, seqid)
+    oprot.writeMessageBegin("describe_schema_versions", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -2004,7 +2090,7 @@ class Processor(TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = describe_splits_result()
-    d = defer.maybeDeferred(self._handler.describe_splits, args.keyspace, args.cfName, args.start_token, args.end_token, args.keys_per_split)
+    d = defer.maybeDeferred(self._handler.describe_splits, args.cfName, args.start_token, args.end_token, args.keys_per_split)
     d.addCallback(self.write_results_success_describe_splits, result, seqid, oprot)
     return d
 
@@ -2177,6 +2263,60 @@ class Processor(TProcessor):
     oprot.writeMessageEnd()
     oprot.trans.flush()
 
+  def process_system_update_keyspace(self, seqid, iprot, oprot):
+    args = system_update_keyspace_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = system_update_keyspace_result()
+    d = defer.maybeDeferred(self._handler.system_update_keyspace, args.ks_def)
+    d.addCallback(self.write_results_success_system_update_keyspace, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_update_keyspace, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_update_keyspace(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_update_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_update_keyspace(self, error, result, seqid, oprot):
+    try:
+      error.raiseException()
+    except InvalidRequestException, ire:
+      result.ire = ire
+    oprot.writeMessageBegin("system_update_keyspace", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def process_system_update_column_family(self, seqid, iprot, oprot):
+    args = system_update_column_family_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = system_update_column_family_result()
+    d = defer.maybeDeferred(self._handler.system_update_column_family, args.cf_def)
+    d.addCallback(self.write_results_success_system_update_column_family, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_system_update_column_family, result, seqid, oprot)
+    return d
+
+  def write_results_success_system_update_column_family(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("system_update_column_family", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_system_update_column_family(self, error, result, seqid, oprot):
+    try:
+      error.raiseException()
+    except InvalidRequestException, ire:
+      result.ire = ire
+    oprot.writeMessageBegin("system_update_column_family", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
 
 # HELPER FUNCTIONS AND STRUCTURES
 
@@ -2240,19 +2380,17 @@ class login_args:
 class login_result:
   """
   Attributes:
-   - success
    - authnx
    - authzx
   """
 
   thrift_spec = (
-    (0, TType.I32, 'success', None, None, ), # 0
+    None, # 0
     (1, TType.STRUCT, 'authnx', (AuthenticationException, AuthenticationException.thrift_spec), None, ), # 1
     (2, TType.STRUCT, 'authzx', (AuthorizationException, AuthorizationException.thrift_spec), None, ), # 2
   )
 
-  def __init__(self, success=None, authnx=None, authzx=None,):
-    self.success = success
+  def __init__(self, authnx=None, authzx=None,):
     self.authnx = authnx
     self.authzx = authzx
 
@@ -2265,12 +2403,7 @@ class login_result:
       (fname, ftype, fid) = iprot.readFieldBegin()
       if ftype == TType.STOP:
         break
-      if fid == 0:
-        if ftype == TType.I32:
-          self.success = iprot.readI32();
-        else:
-          iprot.skip(ftype)
-      elif fid == 1:
+      if fid == 1:
         if ftype == TType.STRUCT:
           self.authnx = AuthenticationException()
           self.authnx.read(iprot)
@@ -2292,10 +2425,6 @@ class login_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('login_result')
-    if self.success != None:
-      oprot.writeFieldBegin('success', TType.I32, 0)
-      oprot.writeI32(self.success)
-      oprot.writeFieldEnd()
     if self.authnx != None:
       oprot.writeFieldBegin('authnx', TType.STRUCT, 1)
       self.authnx.write(oprot)
@@ -3016,7 +3145,7 @@ class multiget_slice_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.LIST, 'keys', (TType.STRING,None), None, ), # 1
+    (1, TType.SET, 'keys', (TType.STRING,None), None, ), # 1
     (2, TType.STRUCT, 'column_parent', (ColumnParent, ColumnParent.thrift_spec), None, ), # 2
     (3, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 3
     (4, TType.I32, 'consistency_level', None,     1, ), # 4
@@ -3038,13 +3167,13 @@ class multiget_slice_args:
       if ftype == TType.STOP:
         break
       if fid == 1:
-        if ftype == TType.LIST:
-          self.keys = []
-          (_etype77, _size74) = iprot.readListBegin()
+        if ftype == TType.SET:
+          self.keys = set()
+          (_etype77, _size74) = iprot.readSetBegin()
           for _i78 in xrange(_size74):
             _elem79 = iprot.readString();
-            self.keys.append(_elem79)
-          iprot.readListEnd()
+            self.keys.add(_elem79)
+          iprot.readSetEnd()
         else:
           iprot.skip(ftype)
       elif fid == 2:
@@ -3075,11 +3204,11 @@ class multiget_slice_args:
       return
     oprot.writeStructBegin('multiget_slice_args')
     if self.keys != None:
-      oprot.writeFieldBegin('keys', TType.LIST, 1)
-      oprot.writeListBegin(TType.STRING, len(self.keys))
+      oprot.writeFieldBegin('keys', TType.SET, 1)
+      oprot.writeSetBegin(TType.STRING, len(self.keys))
       for iter80 in self.keys:
         oprot.writeString(iter80)
-      oprot.writeListEnd()
+      oprot.writeSetEnd()
       oprot.writeFieldEnd()
     if self.column_parent != None:
       oprot.writeFieldBegin('column_parent', TType.STRUCT, 2)
@@ -3223,7 +3352,6 @@ class multiget_slice_result:
 class multiget_count_args:
   """
   Attributes:
-   - keyspace
    - keys
    - column_parent
    - predicate
@@ -3232,15 +3360,13 @@ class multiget_count_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRING, 'keyspace', None, None, ), # 1
-    (2, TType.LIST, 'keys', (TType.STRING,None), None, ), # 2
-    (3, TType.STRUCT, 'column_parent', (ColumnParent, ColumnParent.thrift_spec), None, ), # 3
-    (4, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 4
-    (5, TType.I32, 'consistency_level', None,     1, ), # 5
+    (1, TType.SET, 'keys', (TType.STRING,None), None, ), # 1
+    (2, TType.STRUCT, 'column_parent', (ColumnParent, ColumnParent.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 3
+    (4, TType.I32, 'consistency_level', None,     1, ), # 4
   )
 
-  def __init__(self, keyspace=None, keys=None, column_parent=None, predicate=None, consistency_level=thrift_spec[5][4],):
-    self.keyspace = keyspace
+  def __init__(self, keys=None, column_parent=None, predicate=None, consistency_level=thrift_spec[4][4],):
     self.keys = keys
     self.column_parent = column_parent
     self.predicate = predicate
@@ -3256,33 +3382,28 @@ class multiget_count_args:
       if ftype == TType.STOP:
         break
       if fid == 1:
-        if ftype == TType.STRING:
-          self.keyspace = iprot.readString();
+        if ftype == TType.SET:
+          self.keys = set()
+          (_etype100, _size97) = iprot.readSetBegin()
+          for _i101 in xrange(_size97):
+            _elem102 = iprot.readString();
+            self.keys.add(_elem102)
+          iprot.readSetEnd()
         else:
           iprot.skip(ftype)
       elif fid == 2:
-        if ftype == TType.LIST:
-          self.keys = []
-          (_etype100, _size97) = iprot.readListBegin()
-          for _i101 in xrange(_size97):
-            _elem102 = iprot.readString();
-            self.keys.append(_elem102)
-          iprot.readListEnd()
-        else:
-          iprot.skip(ftype)
-      elif fid == 3:
         if ftype == TType.STRUCT:
           self.column_parent = ColumnParent()
           self.column_parent.read(iprot)
         else:
           iprot.skip(ftype)
-      elif fid == 4:
+      elif fid == 3:
         if ftype == TType.STRUCT:
           self.predicate = SlicePredicate()
           self.predicate.read(iprot)
         else:
           iprot.skip(ftype)
-      elif fid == 5:
+      elif fid == 4:
         if ftype == TType.I32:
           self.consistency_level = iprot.readI32();
         else:
@@ -3297,27 +3418,23 @@ class multiget_count_args:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('multiget_count_args')
-    if self.keyspace != None:
-      oprot.writeFieldBegin('keyspace', TType.STRING, 1)
-      oprot.writeString(self.keyspace)
-      oprot.writeFieldEnd()
     if self.keys != None:
-      oprot.writeFieldBegin('keys', TType.LIST, 2)
-      oprot.writeListBegin(TType.STRING, len(self.keys))
+      oprot.writeFieldBegin('keys', TType.SET, 1)
+      oprot.writeSetBegin(TType.STRING, len(self.keys))
       for iter103 in self.keys:
         oprot.writeString(iter103)
-      oprot.writeListEnd()
+      oprot.writeSetEnd()
       oprot.writeFieldEnd()
     if self.column_parent != None:
-      oprot.writeFieldBegin('column_parent', TType.STRUCT, 3)
+      oprot.writeFieldBegin('column_parent', TType.STRUCT, 2)
       self.column_parent.write(oprot)
       oprot.writeFieldEnd()
     if self.predicate != None:
-      oprot.writeFieldBegin('predicate', TType.STRUCT, 4)
+      oprot.writeFieldBegin('predicate', TType.STRUCT, 3)
       self.predicate.write(oprot)
       oprot.writeFieldEnd()
     if self.consistency_level != None:
-      oprot.writeFieldBegin('consistency_level', TType.I32, 5)
+      oprot.writeFieldBegin('consistency_level', TType.I32, 4)
       oprot.writeI32(self.consistency_level)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
@@ -4494,7 +4611,7 @@ class truncate_result:
   def __ne__(self, other):
     return not (self == other)
 
-class check_schema_agreement_args:
+class describe_schema_versions_args:
 
   thrift_spec = (
   )
@@ -4517,7 +4634,7 @@ class check_schema_agreement_args:
     if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
-    oprot.writeStructBegin('check_schema_agreement_args')
+    oprot.writeStructBegin('describe_schema_versions_args')
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -4532,7 +4649,7 @@ class check_schema_agreement_args:
   def __ne__(self, other):
     return not (self == other)
 
-class check_schema_agreement_result:
+class describe_schema_versions_result:
   """
   Attributes:
    - success
@@ -4588,7 +4705,7 @@ class check_schema_agreement_result:
     if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
-    oprot.writeStructBegin('check_schema_agreement_result')
+    oprot.writeStructBegin('describe_schema_versions_result')
     if self.success != None:
       oprot.writeFieldBegin('success', TType.MAP, 0)
       oprot.writeMapBegin(TType.STRING, TType.LIST, len(self.success))
@@ -5260,7 +5377,6 @@ class describe_keyspace_result:
 class describe_splits_args:
   """
   Attributes:
-   - keyspace
    - cfName
    - start_token
    - end_token
@@ -5269,15 +5385,13 @@ class describe_splits_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRING, 'keyspace', None, None, ), # 1
-    (2, TType.STRING, 'cfName', None, None, ), # 2
-    (3, TType.STRING, 'start_token', None, None, ), # 3
-    (4, TType.STRING, 'end_token', None, None, ), # 4
-    (5, TType.I32, 'keys_per_split', None, None, ), # 5
+    (1, TType.STRING, 'cfName', None, None, ), # 1
+    (2, TType.STRING, 'start_token', None, None, ), # 2
+    (3, TType.STRING, 'end_token', None, None, ), # 3
+    (4, TType.I32, 'keys_per_split', None, None, ), # 4
   )
 
-  def __init__(self, keyspace=None, cfName=None, start_token=None, end_token=None, keys_per_split=None,):
-    self.keyspace = keyspace
+  def __init__(self, cfName=None, start_token=None, end_token=None, keys_per_split=None,):
     self.cfName = cfName
     self.start_token = start_token
     self.end_token = end_token
@@ -5294,25 +5408,20 @@ class describe_splits_args:
         break
       if fid == 1:
         if ftype == TType.STRING:
-          self.keyspace = iprot.readString();
+          self.cfName = iprot.readString();
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRING:
-          self.cfName = iprot.readString();
+          self.start_token = iprot.readString();
         else:
           iprot.skip(ftype)
       elif fid == 3:
         if ftype == TType.STRING:
-          self.start_token = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      elif fid == 4:
-        if ftype == TType.STRING:
           self.end_token = iprot.readString();
         else:
           iprot.skip(ftype)
-      elif fid == 5:
+      elif fid == 4:
         if ftype == TType.I32:
           self.keys_per_split = iprot.readI32();
         else:
@@ -5327,24 +5436,20 @@ class describe_splits_args:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('describe_splits_args')
-    if self.keyspace != None:
-      oprot.writeFieldBegin('keyspace', TType.STRING, 1)
-      oprot.writeString(self.keyspace)
-      oprot.writeFieldEnd()
     if self.cfName != None:
-      oprot.writeFieldBegin('cfName', TType.STRING, 2)
+      oprot.writeFieldBegin('cfName', TType.STRING, 1)
       oprot.writeString(self.cfName)
       oprot.writeFieldEnd()
     if self.start_token != None:
-      oprot.writeFieldBegin('start_token', TType.STRING, 3)
+      oprot.writeFieldBegin('start_token', TType.STRING, 2)
       oprot.writeString(self.start_token)
       oprot.writeFieldEnd()
     if self.end_token != None:
-      oprot.writeFieldBegin('end_token', TType.STRING, 4)
+      oprot.writeFieldBegin('end_token', TType.STRING, 3)
       oprot.writeString(self.end_token)
       oprot.writeFieldEnd()
     if self.keys_per_split != None:
-      oprot.writeFieldBegin('keys_per_split', TType.I32, 5)
+      oprot.writeFieldBegin('keys_per_split', TType.I32, 4)
       oprot.writeI32(self.keys_per_split)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
@@ -6172,6 +6277,256 @@ class system_rename_keyspace_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('system_rename_keyspace_result')
+    if self.success != None:
+      oprot.writeFieldBegin('success', TType.STRING, 0)
+      oprot.writeString(self.success)
+      oprot.writeFieldEnd()
+    if self.ire != None:
+      oprot.writeFieldBegin('ire', TType.STRUCT, 1)
+      self.ire.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class system_update_keyspace_args:
+  """
+  Attributes:
+   - ks_def
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'ks_def', (KsDef, KsDef.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, ks_def=None,):
+    self.ks_def = ks_def
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.ks_def = KsDef()
+          self.ks_def.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('system_update_keyspace_args')
+    if self.ks_def != None:
+      oprot.writeFieldBegin('ks_def', TType.STRUCT, 1)
+      self.ks_def.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class system_update_keyspace_result:
+  """
+  Attributes:
+   - success
+   - ire
+  """
+
+  thrift_spec = (
+    (0, TType.STRING, 'success', None, None, ), # 0
+    (1, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, success=None, ire=None,):
+    self.success = success
+    self.ire = ire
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 0:
+        if ftype == TType.STRING:
+          self.success = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 1:
+        if ftype == TType.STRUCT:
+          self.ire = InvalidRequestException()
+          self.ire.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('system_update_keyspace_result')
+    if self.success != None:
+      oprot.writeFieldBegin('success', TType.STRING, 0)
+      oprot.writeString(self.success)
+      oprot.writeFieldEnd()
+    if self.ire != None:
+      oprot.writeFieldBegin('ire', TType.STRUCT, 1)
+      self.ire.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class system_update_column_family_args:
+  """
+  Attributes:
+   - cf_def
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'cf_def', (CfDef, CfDef.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, cf_def=None,):
+    self.cf_def = cf_def
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.cf_def = CfDef()
+          self.cf_def.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('system_update_column_family_args')
+    if self.cf_def != None:
+      oprot.writeFieldBegin('cf_def', TType.STRUCT, 1)
+      self.cf_def.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class system_update_column_family_result:
+  """
+  Attributes:
+   - success
+   - ire
+  """
+
+  thrift_spec = (
+    (0, TType.STRING, 'success', None, None, ), # 0
+    (1, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, success=None, ire=None,):
+    self.success = success
+    self.ire = ire
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 0:
+        if ftype == TType.STRING:
+          self.success = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 1:
+        if ftype == TType.STRUCT:
+          self.ire = InvalidRequestException()
+          self.ire.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('system_update_column_family_result')
     if self.success != None:
       oprot.writeFieldBegin('success', TType.STRING, 0)
       oprot.writeString(self.success)
