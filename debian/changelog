@@ -1,3 +1,9 @@
+python-telephus (0.6.3) unstable; urgency=low
+
+  * Errback when submitRequest raises an Exception
+
+ -- Brandon Williams <brandon@riptano.com>  Thu, 23 Sep 2010 17:57:44 -0500
+
 python-telephus (0.6.2) unstable; urgency=low
 
   * Fix double errbacks
