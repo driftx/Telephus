@@ -110,7 +110,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 # may have disconnected while we were waiting for a request
                 self.queue.put((request, deferred, retries))
             else:
-                d = proto.submitRequest(request)
+                try:
+                    d = proto.submitRequest(request)
+                except Exception, e:
+                    d = defer.fail(e)
                 retries -= 1
                 d.addCallbacks(reqSuccess,
                                reqError,

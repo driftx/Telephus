@@ -134,3 +134,10 @@ class CassandraClientTest(unittest.TestCase):
         except Exception, e:
             pass
             
+    @defer.inlineCallbacks
+    def test_bad_params(self):
+        try:
+            # pass an int where a string is required
+            yield self.client.get(12345, CF, column='foo')
+        except Exception, e:
+            pass
