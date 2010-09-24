@@ -21,6 +21,7 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     def __init__(self, client_class, iprot_factory, oprot_factory=None):
         TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
         self.deferred = None
+        self.aborted = False
                 
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
@@ -28,10 +29,9 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.factory.clientIdle(self)
         
     def connectionLost(self, reason=None):
-        try:
+        if not self.aborted: # don't allow parent class to raise unhandled TTransport
+                             # exceptions, the manager handled our failure
             TTwisted.ThriftClientProtocol.connectionLost(self, reason)
-        except RuntimeError:
-            pass
         self.factory.clientGone(self)
         
     def _complete(self, res=None):
@@ -51,6 +51,10 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             return d
         else:
             raise ClientBusy
+        
+    def abort(self):
+        self.aborted = True
+        self.transport.loseConnection()
         
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
@@ -113,6 +117,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 try:
                     d = proto.submitRequest(request)
                 except Exception, e:
+                    proto.abort()
                     d = defer.fail(e)
                 retries -= 1
                 d.addCallbacks(reqSuccess,
