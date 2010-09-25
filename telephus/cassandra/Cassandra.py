@@ -131,16 +131,16 @@ class Iface(Interface):
     """
     pass
 
-  def remove(key, column_path, clock, consistency_level):
+  def remove(key, column_path, timestamp, consistency_level):
     """
-    Remove data from the row specified by key at the granularity specified by column_path, and the given clock. Note
+    Remove data from the row specified by key at the granularity specified by column_path, and the given timestamp. Note
     that all the values in column_path besides column_path.column_family are truly optional: you can remove the entire
     row by just specifying the ColumnFamily, or you can remove a SuperColumn or a single Column by specifying those levels too.
     
     Parameters:
      - key
      - column_path
-     - clock
+     - timestamp
      - consistency_level
     """
     pass
@@ -774,30 +774,30 @@ class Client:
       return d.errback(result.te)
     return d.callback(None)
 
-  def remove(self, key, column_path, clock, consistency_level):
+  def remove(self, key, column_path, timestamp, consistency_level):
     """
-    Remove data from the row specified by key at the granularity specified by column_path, and the given clock. Note
+    Remove data from the row specified by key at the granularity specified by column_path, and the given timestamp. Note
     that all the values in column_path besides column_path.column_family are truly optional: you can remove the entire
     row by just specifying the ColumnFamily, or you can remove a SuperColumn or a single Column by specifying those levels too.
     
     Parameters:
      - key
      - column_path
-     - clock
+     - timestamp
      - consistency_level
     """
     self._seqid += 1
     d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_remove(key, column_path, clock, consistency_level)
+    self.send_remove(key, column_path, timestamp, consistency_level)
     return d
 
-  def send_remove(self, key, column_path, clock, consistency_level):
+  def send_remove(self, key, column_path, timestamp, consistency_level):
     oprot = self._oprot_factory.getProtocol(self._transport)
     oprot.writeMessageBegin('remove', TMessageType.CALL, self._seqid)
     args = remove_args()
     args.key = key
     args.column_path = column_path
-    args.clock = clock
+    args.timestamp = timestamp
     args.consistency_level = consistency_level
     args.write(oprot)
     oprot.writeMessageEnd()
@@ -1854,7 +1854,7 @@ class Processor(TProcessor):
     args.read(iprot)
     iprot.readMessageEnd()
     result = remove_result()
-    d = defer.maybeDeferred(self._handler.remove, args.key, args.column_path, args.clock, args.consistency_level)
+    d = defer.maybeDeferred(self._handler.remove, args.key, args.column_path, args.timestamp, args.consistency_level)
     d.addCallback(self.write_results_success_remove, result, seqid, oprot)
     d.addErrback(self.write_results_exception_remove, result, seqid, oprot)
     return d
@@ -3145,7 +3145,7 @@ class multiget_slice_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.SET, 'keys', (TType.STRING,None), None, ), # 1
+    (1, TType.LIST, 'keys', (TType.STRING,None), None, ), # 1
     (2, TType.STRUCT, 'column_parent', (ColumnParent, ColumnParent.thrift_spec), None, ), # 2
     (3, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 3
     (4, TType.I32, 'consistency_level', None,     1, ), # 4
@@ -3167,13 +3167,13 @@ class multiget_slice_args:
       if ftype == TType.STOP:
         break
       if fid == 1:
-        if ftype == TType.SET:
-          self.keys = set()
-          (_etype77, _size74) = iprot.readSetBegin()
+        if ftype == TType.LIST:
+          self.keys = []
+          (_etype77, _size74) = iprot.readListBegin()
           for _i78 in xrange(_size74):
             _elem79 = iprot.readString();
-            self.keys.add(_elem79)
-          iprot.readSetEnd()
+            self.keys.append(_elem79)
+          iprot.readListEnd()
         else:
           iprot.skip(ftype)
       elif fid == 2:
@@ -3204,11 +3204,11 @@ class multiget_slice_args:
       return
     oprot.writeStructBegin('multiget_slice_args')
     if self.keys != None:
-      oprot.writeFieldBegin('keys', TType.SET, 1)
-      oprot.writeSetBegin(TType.STRING, len(self.keys))
+      oprot.writeFieldBegin('keys', TType.LIST, 1)
+      oprot.writeListBegin(TType.STRING, len(self.keys))
       for iter80 in self.keys:
         oprot.writeString(iter80)
-      oprot.writeSetEnd()
+      oprot.writeListEnd()
       oprot.writeFieldEnd()
     if self.column_parent != None:
       oprot.writeFieldBegin('column_parent', TType.STRUCT, 2)
@@ -3360,7 +3360,7 @@ class multiget_count_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.SET, 'keys', (TType.STRING,None), None, ), # 1
+    (1, TType.LIST, 'keys', (TType.STRING,None), None, ), # 1
     (2, TType.STRUCT, 'column_parent', (ColumnParent, ColumnParent.thrift_spec), None, ), # 2
     (3, TType.STRUCT, 'predicate', (SlicePredicate, SlicePredicate.thrift_spec), None, ), # 3
     (4, TType.I32, 'consistency_level', None,     1, ), # 4
@@ -3382,13 +3382,13 @@ class multiget_count_args:
       if ftype == TType.STOP:
         break
       if fid == 1:
-        if ftype == TType.SET:
-          self.keys = set()
-          (_etype100, _size97) = iprot.readSetBegin()
+        if ftype == TType.LIST:
+          self.keys = []
+          (_etype100, _size97) = iprot.readListBegin()
           for _i101 in xrange(_size97):
             _elem102 = iprot.readString();
-            self.keys.add(_elem102)
-          iprot.readSetEnd()
+            self.keys.append(_elem102)
+          iprot.readListEnd()
         else:
           iprot.skip(ftype)
       elif fid == 2:
@@ -3419,11 +3419,11 @@ class multiget_count_args:
       return
     oprot.writeStructBegin('multiget_count_args')
     if self.keys != None:
-      oprot.writeFieldBegin('keys', TType.SET, 1)
-      oprot.writeSetBegin(TType.STRING, len(self.keys))
+      oprot.writeFieldBegin('keys', TType.LIST, 1)
+      oprot.writeListBegin(TType.STRING, len(self.keys))
       for iter103 in self.keys:
         oprot.writeString(iter103)
-      oprot.writeSetEnd()
+      oprot.writeListEnd()
       oprot.writeFieldEnd()
     if self.column_parent != None:
       oprot.writeFieldBegin('column_parent', TType.STRUCT, 2)
@@ -4133,7 +4133,7 @@ class remove_args:
   Attributes:
    - key
    - column_path
-   - clock
+   - timestamp
    - consistency_level
   """
 
@@ -4141,14 +4141,14 @@ class remove_args:
     None, # 0
     (1, TType.STRING, 'key', None, None, ), # 1
     (2, TType.STRUCT, 'column_path', (ColumnPath, ColumnPath.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'clock', (Clock, Clock.thrift_spec), None, ), # 3
+    (3, TType.I64, 'timestamp', None, None, ), # 3
     (4, TType.I32, 'consistency_level', None,     1, ), # 4
   )
 
-  def __init__(self, key=None, column_path=None, clock=None, consistency_level=thrift_spec[4][4],):
+  def __init__(self, key=None, column_path=None, timestamp=None, consistency_level=thrift_spec[4][4],):
     self.key = key
     self.column_path = column_path
-    self.clock = clock
+    self.timestamp = timestamp
     self.consistency_level = consistency_level
 
   def read(self, iprot):
@@ -4172,9 +4172,8 @@ class remove_args:
         else:
           iprot.skip(ftype)
       elif fid == 3:
-        if ftype == TType.STRUCT:
-          self.clock = Clock()
-          self.clock.read(iprot)
+        if ftype == TType.I64:
+          self.timestamp = iprot.readI64();
         else:
           iprot.skip(ftype)
       elif fid == 4:
@@ -4200,9 +4199,9 @@ class remove_args:
       oprot.writeFieldBegin('column_path', TType.STRUCT, 2)
       self.column_path.write(oprot)
       oprot.writeFieldEnd()
-    if self.clock != None:
-      oprot.writeFieldBegin('clock', TType.STRUCT, 3)
-      self.clock.write(oprot)
+    if self.timestamp != None:
+      oprot.writeFieldBegin('timestamp', TType.I64, 3)
+      oprot.writeI64(self.timestamp)
       oprot.writeFieldEnd()
     if self.consistency_level != None:
       oprot.writeFieldBegin('consistency_level', TType.I32, 4)

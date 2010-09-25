@@ -31,7 +31,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print '   get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level)'
   print '   get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level)'
   print '  void insert(string key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level)'
-  print '  void remove(string key, ColumnPath column_path, Clock clock, ConsistencyLevel consistency_level)'
+  print '  void remove(string key, ColumnPath column_path, i64 timestamp, ConsistencyLevel consistency_level)'
   print '  void batch_mutate( mutation_map, ConsistencyLevel consistency_level)'
   print '  void truncate(string cfname)'
   print '   describe_schema_versions()'
