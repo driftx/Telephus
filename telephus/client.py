@@ -12,13 +12,13 @@ class CassandraClient(object):
         return int(time.time() * 1000000)
     
     def _getparent(self, columnParentOrCF, super_column=None):
-        if isinstance(columnParentOrCF, basestring):
+        if isinstance(columnParentOrCF, str):
             return ColumnParent(columnParentOrCF, super_column=super_column)
         else:
             return columnParentOrCF
         
     def _getpath(self, columnPathOrCF, col, super_column=None):
-        if isinstance(columnPathOrCF, basestring):
+        if isinstance(columnPathOrCF, str):
             return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
