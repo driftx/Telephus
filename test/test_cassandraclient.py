@@ -7,11 +7,14 @@ from telephus.cassandra.ttypes import *
 
 CONNS = 5
 
-HOST = 'localhost'
+HOST = 'aang'
 PORT = 9160
 KEYSPACE = 'Keyspace1'
+T_KEYSPACE = 'TransientKeyspace'
 CF = 'Standard1'
 SCF = 'Super1'
+T_CF = 'TransientCF'
+T_SCF = 'TransientSCF'
 COLUMN = 'foo'
 COLUMN2 = 'foo2'
 SCOLUMN = 'bar'
@@ -125,6 +128,42 @@ class CassandraClientTest(unittest.TestCase):
         keys = [k.key for k in ks]
         for key in ['test', 'test2']:
             self.assert_(key in keys)
+
+    @defer.inlineCallbacks
+    def test_keyspace_manipulation(self):
+        ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', replication_factor=1, cf_defs=[])
+        yield self.client.system_add_keyspace(ksdef)
+        ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
+        self.assert_(ksdef == ks2, msg='%s != %s' % (ksdef, ks2))
+        newname = T_KEYSPACE + '2'
+        yield self.client.system_rename_keyspace(T_KEYSPACE, newname)
+        ks2 = yield self.client.describe_keyspace(newname)
+        ksdef.name = newname
+        self.assert_(ksdef == ks2)
+        yield self.client.system_drop_keyspace(newname)
+        self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
+        self.assertFailure(self.client.describe_keyspace(newname), NotFoundException)
+
+    @defer.inlineCallbacks
+    def test_column_family_manipulation(self):
+        cfdef = CfDef(KEYSPACE, T_CF, column_type='Standard', comparator_type='org.apache.cassandra.db.marshal.BytesType', comment='foo', min_compaction_threshold=5, gc_grace_seconds=86400, column_metadata=[], default_validation_class='org.apache.cassandra.db.marshal.BytesType', max_compaction_threshold=31)
+        yield self.client.system_add_column_family(cfdef)
+        ksdef = yield self.client.describe_keyspace(KEYSPACE)
+        cfdef2 = [c for c in ksdef.cf_defs if c.name == T_CF][0]
+        # we don't know the id ahead of time. copy the new one so the equality
+        # comparison won't fail
+        cfdef.id = cfdef2.id
+        self.assert_(cfdef == cfdef2, msg='%s != %s' % (cfdef, cfdef2))
+        newname = T_CF + '2'
+        yield self.client.system_rename_column_family(T_CF, newname)
+        ksdef = yield self.client.describe_keyspace(KEYSPACE)
+        cfdef2 = [c for c in ksdef.cf_defs if c.name == newname][0]
+        self.assert_(len([c for c in ksdef.cf_defs if c.name == T_CF]) == 0)
+        cfdef.name = newname
+        self.assert_(cfdef == cfdef2)
+        yield self.client.system_drop_column_family(newname)
+        ksdef = yield self.client.describe_keyspace(KEYSPACE)
+        self.assert_(len([c for c in ksdef.cf_defs if c.name == newname]) == 0)
 
     @defer.inlineCallbacks
     def test_errback(self):
