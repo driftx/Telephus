@@ -166,6 +166,37 @@ class CassandraClientTest(unittest.TestCase):
         self.assert_(len([c for c in ksdef.cf_defs if c.name == newname]) == 0)
 
     @defer.inlineCallbacks
+    def test_describes(self):
+        name = yield self.client.describe_cluster_name()
+        self.assert_(isinstance(name, str),
+                     msg='cluster name object not str: %r' % name)
+        self.assert_(len(name) > 0)
+        partitioner = yield self.client.describe_partitioner()
+        self.assert_(partitioner.startswith('org.apache.cassandra.'),
+                     msg='partitioner is %r' % partitioner)
+        snitch = yield self.client.describe_snitch()
+        self.assert_(snitch.startswith('org.apache.cassandra.'),
+                     msg='snitch is %r' % snitch)
+        version = yield self.client.describe_version()
+        self.assert_(isinstance(version, str), msg='version is %r' % version)
+        self.assert_('.' in version, msg='version is %r' % version)
+        schemavers = yield self.client.describe_schema_versions()
+        self.assert_(isinstance(schemavers, dict),
+                     msg='schema versions object is %r' % schemavers)
+        self.assert_(len(schemavers) > 0)
+        ring = yield self.client.describe_ring(KEYSPACE)
+        self.assert_(isinstance(ring, list),
+                     msg='ring description object is %r' % ring)
+        self.assert_(len(ring) > 0)
+        for r in ring:
+            self.assert_(isinstance(r.start_token, str))
+            self.assert_(isinstance(r.end_token, str))
+            self.assert_(isinstance(r.endpoints, list))
+            self.assert_(len(r.endpoints) > 0)
+            for ep in r.endpoints:
+                self.assert_(isinstance(ep, str))
+
+    @defer.inlineCallbacks
     def test_errback(self):
         yield self.client.remove('poiqwe', CF)
         try:

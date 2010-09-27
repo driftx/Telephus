@@ -203,6 +203,10 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_partitioner')
         return self.manager.pushRequest(req, retries=retries)
     
+    def describe_snitch(self, retries=None):
+        req = ManagedThriftRequest('describe_snitch')
+        return self.manager.pushRequest(req, retries=retries)
+    
     def describe_ring(self, keyspace, retries=None):
         req = ManagedThriftRequest('describe_ring', keyspace)
         return self.manager.pushRequest(req, retries=retries)
