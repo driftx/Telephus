@@ -220,6 +220,12 @@ class Iface(Interface):
     """
     pass
 
+  def describe_snitch():
+    """
+    returns the snitch used by this cluster
+    """
+    pass
+
   def describe_keyspace(keyspace):
     """
     describe specified keyspace
@@ -1110,6 +1116,37 @@ class Client:
       return d.callback(result.success)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_partitioner failed: unknown result"))
 
+  def describe_snitch(self, ):
+    """
+    returns the snitch used by this cluster
+    """
+    self._seqid += 1
+    d = self._reqs[self._seqid] = defer.Deferred()
+    self.send_describe_snitch()
+    return d
+
+  def send_describe_snitch(self, ):
+    oprot = self._oprot_factory.getProtocol(self._transport)
+    oprot.writeMessageBegin('describe_snitch', TMessageType.CALL, self._seqid)
+    args = describe_snitch_args()
+    args.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def recv_describe_snitch(self, iprot, mtype, rseqid):
+    d = self._reqs.pop(rseqid)
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      return d.errback(x)
+    result = describe_snitch_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.success != None:
+      return d.callback(result.success)
+    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_snitch failed: unknown result"))
+
   def describe_keyspace(self, keyspace):
     """
     describe specified keyspace
@@ -1518,6 +1555,7 @@ class Processor(TProcessor):
     self._processMap["describe_version"] = Processor.process_describe_version
     self._processMap["describe_ring"] = Processor.process_describe_ring
     self._processMap["describe_partitioner"] = Processor.process_describe_partitioner
+    self._processMap["describe_snitch"] = Processor.process_describe_snitch
     self._processMap["describe_keyspace"] = Processor.process_describe_keyspace
     self._processMap["describe_splits"] = Processor.process_describe_splits
     self._processMap["system_add_column_family"] = Processor.process_system_add_column_family
@@ -2054,6 +2092,22 @@ class Processor(TProcessor):
   def write_results_success_describe_partitioner(self, success, result, seqid, oprot):
     result.success = success
     oprot.writeMessageBegin("describe_partitioner", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def process_describe_snitch(self, seqid, iprot, oprot):
+    args = describe_snitch_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = describe_snitch_result()
+    d = defer.maybeDeferred(self._handler.describe_snitch, )
+    d.addCallback(self.write_results_success_describe_snitch, result, seqid, oprot)
+    return d
+
+  def write_results_success_describe_snitch(self, success, result, seqid, oprot):
+    result.success = success
+    oprot.writeMessageBegin("describe_snitch", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -5230,6 +5284,99 @@ class describe_partitioner_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('describe_partitioner_result')
+    if self.success != None:
+      oprot.writeFieldBegin('success', TType.STRING, 0)
+      oprot.writeString(self.success)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class describe_snitch_args:
+
+  thrift_spec = (
+  )
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('describe_snitch_args')
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class describe_snitch_result:
+  """
+  Attributes:
+   - success
+  """
+
+  thrift_spec = (
+    (0, TType.STRING, 'success', None, None, ), # 0
+  )
+
+  def __init__(self, success=None,):
+    self.success = success
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 0:
+        if ftype == TType.STRING:
+          self.success = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('describe_snitch_result')
     if self.success != None:
       oprot.writeFieldBegin('success', TType.STRING, 0)
       oprot.writeString(self.success)
