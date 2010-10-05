@@ -1,3 +1,16 @@
+python-telephus (0.7~beta3) unstable; urgency=low
+
+  * Brandon Williams <brandon@riptano.com>:
+    + Drop unusable connection if submitRequest raises an Exception
+    + Update/add methods for new generated code
+    + Update thrift generated code
+    + check_schema_agreement is now describe_schema_versions
+  * Author: paul cannon <paul@riptano.com>
+    + add describe_snitch() and tests
+    + tests for keyspace/cf manipulation
+
+ -- paul cannon <paul@aang.riptano.com>  Tue, 05 Oct 2010 15:01:40 -0500
+
 python-telephus (0.7~beta2) unstable; urgency=low
 
   * Additional fixes by Brandon Williams <brandon@riptano.com>:
