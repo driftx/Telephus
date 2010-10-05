@@ -7,7 +7,7 @@ from telephus.cassandra.ttypes import *
 
 CONNS = 5
 
-HOST = 'aang'
+HOST = 'localhost'
 PORT = 9160
 KEYSPACE = 'Keyspace1'
 T_KEYSPACE = 'TransientKeyspace'
