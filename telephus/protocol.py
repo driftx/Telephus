@@ -168,9 +168,9 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             else:
                 try:
                     d = proto.submitRequest(request)
-                except Exception, e:
+                except Exception:
                     proto.abort()
-                    d = defer.fail(e)
+                    d = defer.fail()
                 retries -= 1
                 d.addCallbacks(reqSuccess,
                                reqError,
