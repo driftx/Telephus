@@ -20,6 +20,7 @@ build-stamp:
 	dh_testdir
 	dh_installdirs
 	
+	./check_ver.sh
 	set -e; \
 	    python setup.py install --root $(CURDIR)/debian/python-telephus
 	
