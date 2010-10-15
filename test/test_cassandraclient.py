@@ -4,10 +4,11 @@ from twisted.internet import defer, reactor
 from telephus.protocol import ManagedCassandraClientFactory
 from telephus.client import CassandraClient
 from telephus.cassandra.ttypes import *
+import os
 
 CONNS = 5
 
-HOST = 'localhost'
+HOST = os.environ.get('CASSANDRA_HOST', 'localhost')
 PORT = 9160
 KEYSPACE = 'Keyspace1'
 T_KEYSPACE = 'TransientKeyspace'
