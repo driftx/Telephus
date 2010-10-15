@@ -142,8 +142,8 @@ class CassandraClientTest(unittest.TestCase):
         ksdef.name = newname
         self.assert_(ksdef == ks2)
         yield self.client.system_drop_keyspace(newname)
-        self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
-        self.assertFailure(self.client.describe_keyspace(newname), NotFoundException)
+        yield self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
+        yield self.assertFailure(self.client.describe_keyspace(newname), NotFoundException)
 
     @defer.inlineCallbacks
     def test_column_family_manipulation(self):
