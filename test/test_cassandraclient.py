@@ -10,8 +10,8 @@ CONNS = 5
 
 HOST = os.environ.get('CASSANDRA_HOST', 'localhost')
 PORT = 9160
-KEYSPACE = 'Keyspace1'
-T_KEYSPACE = 'TransientKeyspace'
+KEYSPACE = 'TelephusTests'
+T_KEYSPACE = 'TelephusTests2'
 CF = 'Standard1'
 SCF = 'Super1'
 T_CF = 'TransientCF'
@@ -21,19 +21,37 @@ COLUMN2 = 'foo2'
 SCOLUMN = 'bar'
 
 class CassandraClientTest(unittest.TestCase):
+    @defer.inlineCallbacks
     def setUp(self):
-        self.cmanager = ManagedCassandraClientFactory(keyspace=KEYSPACE)
+        self.cmanager = ManagedCassandraClientFactory(keyspace='system')
         self.client = CassandraClient(self.cmanager)
         for i in xrange(CONNS):
             reactor.connectTCP(HOST, PORT, self.cmanager)
-        return self.cmanager.deferred
+        yield self.cmanager.deferred
+
+        self.my_keyspace = KsDef(
+            name=KEYSPACE,
+            strategy_class='org.apache.cassandra.locator.SimpleStrategy',
+            replication_factor=1,
+            cf_defs=[
+                CfDef(
+                    keyspace=KEYSPACE,
+                    name=CF,
+                    column_type='Standard'
+                ),
+                CfDef(
+                    keyspace=KEYSPACE,
+                    name=SCF,
+                    column_type='Super'
+                )
+            ]
+        )
+        yield self.client.system_add_keyspace(self.my_keyspace)
+        yield self.client.set_keyspace(KEYSPACE)
     
     @defer.inlineCallbacks
     def tearDown(self):
-        yield self.client.remove('test', CF)
-        yield self.client.remove('test2', CF)
-        yield self.client.remove('test', SCF)
-        yield self.client.remove('test2', SCF)
+        yield self.client.system_drop_keyspace(self.my_keyspace.name)
         self.cmanager.shutdown()
         for c in reactor.getDelayedCalls():
             c.cancel()
