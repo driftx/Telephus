@@ -107,6 +107,17 @@ class CassandraClient(object):
         req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
+    def get_indexed_slices(self, columnParent, expressions, start_key='', column_start='',
+            column_finish='', names=None, count=100, column_count=100,
+            reverse=False, consistency=None, super_column=None,
+            retries=None):
+        idx_clause = IndexClause(expressions, start_key, count)
+        cp = self._getparent(columnParent, super_column)
+        consistency = consistency or self.consistency
+        pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
+        req = ManagedThriftRequest('get_indexed_slices', cp, idx_clause, pred, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
     def insert(self, key, columnParent, value, column=None, super_column=None,
                timestamp=None, consistency=None, retries=None):
         timestamp = timestamp or self._time()
