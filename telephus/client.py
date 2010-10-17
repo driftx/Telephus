@@ -1,3 +1,4 @@
+from twisted.internet import defer
 from telephus.cassandra.ttypes import *
 from telephus.protocol import ManagedThriftRequest
 from collections import defaultdict
@@ -30,16 +31,18 @@ class CassandraClient(object):
             srange = SliceRange(start, finish, reverse, count)
         return SlicePredicate(names, srange)
 
+    @defer.inlineCallbacks
     def _wait_for_schema_agreement(self):
         agreement = False
         while not agreement:
-            result = yield self.describe_schema_versions
+            result = yield self.describe_schema_versions()
             agreement = len(result) == 1
-
+            
+    @defer.inlineCallbacks
     def _push_system_request(self,req,retries=None,block=True):
-        result = self.manager.pushRequest(req, retries=retries)
-        if block: self._wait_for_schema_agreement()
-        return result
+        result = yield self.manager.pushRequest(req, retries=retries)
+        if block: yield self._wait_for_schema_agreement()
+        defer.returnValue(result)
         
     def get(self, key, columnPath, column=None, super_column=None, consistency=None,
             retries=None):
@@ -247,6 +250,7 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_schema_versions')
         return self.manager.pushRequest(req, retries=retries)
     
+    
     def system_drop_column_family(self, cfName, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_column_family', cfName)
         return self._push_system_request(req,retries=retries,block=block)
@@ -276,7 +280,7 @@ class CassandraClient(object):
     def system_add_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
         return self._push_system_request(req,retries=retries,block=block)
-    
+        
     def system_update_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_keyspace', ksDef)
         return self._push_system_request(req,retries=retries,block=block)
