@@ -29,7 +29,18 @@ class CassandraClient(object):
         else:
             srange = SliceRange(start, finish, reverse, count)
         return SlicePredicate(names, srange)
-    
+
+    def _wait_for_schema_agreement(self):
+        agreement = False
+        while not agreement:
+            result = yield self.describe_schema_versions
+            agreement = len(result) == 1
+
+    def _push_system_request(self,req,retries=None,block=True):
+        result = self.manager.pushRequest(req, retries=retries)
+        if block: self._wait_for_schema_agreement()
+        return result
+        
     def get(self, key, columnPath, column=None, super_column=None, consistency=None,
             retries=None):
         cp = self._getpath(columnPath, column, super_column)
@@ -225,38 +236,39 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_schema_versions')
         return self.manager.pushRequest(req, retries=retries)
     
-    def system_drop_column_family(self, cfName, retries=None):
+    def system_drop_column_family(self, cfName, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_column_family', cfName)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_drop_keyspace(self, keyspace, retries=None):
+    def system_drop_keyspace(self, keyspace, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_keyspace', keyspace)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_rename_column_family(self, oldname, newname, retries=None):
+    def system_rename_column_family(self, oldname, newname, retries=None, block=True):
+        if block: self._wait_for_schema_agreement()
         req = ManagedThriftRequest('system_rename_column_family', oldname, newname)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_rename_keyspace(self, oldname, newname, retries=None):
+    def system_rename_keyspace(self, oldname, newname, retries=None, block=True):
         req = ManagedThriftRequest('system_rename_keyspace', oldname, newname)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
     # TODO: make friendly
-    def system_add_column_family(self, cfDef, retries=None):
+    def system_add_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_update_column_family(self, cfDef, retries=None):
+    def system_update_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_column_family', cfDef)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_add_keyspace(self, ksDef, retries=None):
+    def system_add_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
     
-    def system_update_keyspace(self, ksDef, retries=None):
+    def system_update_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_keyspace', ksDef)
-        return self.manager.pushRequest(req, retries=retries)
+        return self._push_system_request(req,retries=retries,block=block)
 
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')
