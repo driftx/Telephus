@@ -262,14 +262,16 @@ class CassandraClient(object):
         req = ManagedThriftRequest('system_drop_keyspace', keyspace)
         return self._push_system_request(req,retries=retries,block=block)
     
-    def system_rename_column_family(self, oldname, newname, retries=None, block=True):
-        if block: self._wait_for_schema_agreement()
-        req = ManagedThriftRequest('system_rename_column_family', oldname, newname)
-        return self._push_system_request(req,retries=retries,block=block)
-    
-    def system_rename_keyspace(self, oldname, newname, retries=None, block=True):
-        req = ManagedThriftRequest('system_rename_keyspace', oldname, newname)
-        return self._push_system_request(req,retries=retries,block=block)
+    if 0:
+        # these are disabled in Cassandra 0.7 right now
+        def system_rename_column_family(self, oldname, newname, retries=None, block=True):
+            if block: self._wait_for_schema_agreement()
+            req = ManagedThriftRequest('system_rename_column_family', oldname, newname)
+            return self._push_system_request(req,retries=retries,block=block)
+
+        def system_rename_keyspace(self, oldname, newname, retries=None, block=True):
+            req = ManagedThriftRequest('system_rename_keyspace', oldname, newname)
+            return self._push_system_request(req,retries=retries,block=block)
     
     # TODO: make friendly
     def system_add_column_family(self, cfDef, retries=None, block=True):

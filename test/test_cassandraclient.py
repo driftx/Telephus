@@ -21,6 +21,9 @@ COLUMN = 'foo'
 COLUMN2 = 'foo2'
 SCOLUMN = 'bar'
 
+# until Cassandra supports these again..
+DO_SYSTEM_RENAMING = False
+
 class CassandraClientTest(unittest.TestCase):
     @defer.inlineCallbacks
     def setUp(self):
@@ -177,18 +180,37 @@ class CassandraClientTest(unittest.TestCase):
         yield self.client.system_add_keyspace(ksdef)
         ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
         self.assertEqual(ksdef, ks2)
-        newname = T_KEYSPACE + '2'
-        yield self.client.system_rename_keyspace(T_KEYSPACE, newname)
-        ks2 = yield self.client.describe_keyspace(newname)
-        ksdef.name = newname
-        self.assertEqual(ksdef, ks2)
-        yield self.client.system_drop_keyspace(newname)
+        if DO_SYSTEM_RENAMING:
+            newname = T_KEYSPACE + '2'
+            yield self.client.system_rename_keyspace(T_KEYSPACE, newname)
+            ks2 = yield self.client.describe_keyspace(newname)
+            ksdef.name = newname
+            self.assertEqual(ksdef, ks2)
+        yield self.client.system_drop_keyspace(ksdef.name)
         yield self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
-        yield self.assertFailure(self.client.describe_keyspace(newname), NotFoundException)
+        if DO_SYSTEM_RENAMING:
+            yield self.assertFailure(self.client.describe_keyspace(ksdef.name), NotFoundException)
 
     @defer.inlineCallbacks
     def test_column_family_manipulation(self):
-        cfdef = CfDef(KEYSPACE, T_CF, column_type='Standard', comparator_type='org.apache.cassandra.db.marshal.BytesType', comment='foo', min_compaction_threshold=5, gc_grace_seconds=86400, column_metadata=[], default_validation_class='org.apache.cassandra.db.marshal.BytesType', max_compaction_threshold=31)
+        cfdef = CfDef(KEYSPACE, T_CF,
+            column_type='Standard',
+            comparator_type='org.apache.cassandra.db.marshal.BytesType',
+            comment='foo',
+            row_cache_size=0.0,
+            key_cache_size=200000.0,
+            read_repair_chance=1.0,
+            column_metadata=[],
+            gc_grace_seconds=86400,
+            default_validation_class='org.apache.cassandra.db.marshal.BytesType',
+            min_compaction_threshold=5,
+            max_compaction_threshold=31,
+            row_cache_save_period_in_seconds=0,
+            key_cache_save_period_in_seconds=3600,
+            memtable_flush_after_mins=60,
+            memtable_throughput_in_mb=249,
+            memtable_operations_in_millions=1.1671875,
+        )
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
         cfdef2 = [c for c in ksdef.cf_defs if c.name == T_CF][0]
@@ -196,16 +218,17 @@ class CassandraClientTest(unittest.TestCase):
         # comparison won't fail
         cfdef.id = cfdef2.id
         self.assertEqual(cfdef, cfdef2)
-        newname = T_CF + '2'
-        yield self.client.system_rename_column_family(T_CF, newname)
+        if DO_SYSTEM_RENAMING:
+            newname = T_CF + '2'
+            yield self.client.system_rename_column_family(T_CF, newname)
+            ksdef = yield self.client.describe_keyspace(KEYSPACE)
+            cfdef2 = [c for c in ksdef.cf_defs if c.name == newname][0]
+            self.assertNotIn(T_CF, [c.name for c in ksdef.cf_defs])
+            cfdef.name = newname
+            self.assertEqual(cfdef, cfdef2)
+        yield self.client.system_drop_column_family(cfdef.name)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
-        cfdef2 = [c for c in ksdef.cf_defs if c.name == newname][0]
-        self.assertNotIn(T_CF, [c.name for c in ksdef.cf_defs])
-        cfdef.name = newname
-        self.assertEqual(cfdef, cfdef2)
-        yield self.client.system_drop_column_family(newname)
-        ksdef = yield self.client.describe_keyspace(KEYSPACE)
-        self.assertNotIn(newname, [c.name for c in ksdef.cf_defs])
+        self.assertNotIn(cfdef.name, [c.name for c in ksdef.cf_defs])
 
     @defer.inlineCallbacks
     def test_describes(self):
