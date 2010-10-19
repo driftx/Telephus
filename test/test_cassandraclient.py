@@ -14,6 +14,7 @@ KEYSPACE = 'TelephusTests'
 T_KEYSPACE = 'TelephusTests2'
 CF = 'Standard1'
 SCF = 'Super1'
+IDX_CF = 'IdxTestCF'
 T_CF = 'TransientCF'
 T_SCF = 'TransientSCF'
 COLUMN = 'foo'
@@ -43,7 +44,20 @@ class CassandraClientTest(unittest.TestCase):
                     keyspace=KEYSPACE,
                     name=SCF,
                     column_type='Super'
-                )
+                ),
+                CfDef(
+                    keyspace=KEYSPACE,
+                    name=IDX_CF,
+                    column_type='Standard',
+                    comparator_type='org.apache.cassandra.db.marshal.UTF8Type',
+                    column_metadata=[
+                        ColumnDef(
+                            name='col1',
+                            validation_class='org.apache.cassandra.db.marshal.UTF8Type',
+                            index_type=IndexType.KEYS,
+                            index_name='idxCol1')
+                    ],
+                    default_validation_class='org.apache.cassandra.db.marshal.BytesType')
             ]
         )
         yield self.client.system_add_keyspace(self.my_keyspace)
@@ -150,17 +164,12 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_indexed_slices(self):
-        coldef = ColumnDef(name='col1', validation_class='org.apache.cassandra.db.marshal.UTF8Type', index_type=0, index_name='idxCol1')
-        cfdef = CfDef(KEYSPACE, 'IdxTestCF', column_type='Standard', comparator_type='org.apache.cassandra.db.marshal.UTF8Type', column_metadata=[coldef], default_validation_class='org.apache.cassandra.db.marshal.BytesType')
-        yield self.client.system_add_column_family(cfdef)
-        yield self.client.insert('test1', 'IdxTestCF', 'one', column='col1')
-        yield self.client.insert('test2', 'IdxTestCF', 'two', column='col1')
-        yield self.client.insert('test3', 'IdxTestCF', 'three', column='col1')
+        yield self.client.insert('test1', IDX_CF, 'one', column='col1')
+        yield self.client.insert('test2', IDX_CF, 'two', column='col1')
+        yield self.client.insert('test3', IDX_CF, 'three', column='col1')
         expressions = [IndexExpression('col1', IndexOperator.EQ, 'two')]
-        res = yield self.client.get_indexed_slices('IdxTestCF', expressions, start_key='')
+        res = yield self.client.get_indexed_slices(IDX_CF, expressions, start_key='')
         self.assertEquals(res[0].columns[0].column.value,'two')
-        yield self.client.system_drop_column_family('IdxTestCF')
-        
 
     @defer.inlineCallbacks
     def test_keyspace_manipulation(self):
