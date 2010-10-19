@@ -269,16 +269,6 @@ class Iface(Interface):
     """
     pass
 
-  def system_rename_column_family(old_name, new_name):
-    """
-    renames a column family. returns the new schema id.
-    
-    Parameters:
-     - old_name
-     - new_name
-    """
-    pass
-
   def system_add_keyspace(ks_def):
     """
     adds a keyspace and any column families that are part of it. returns the new schema id.
@@ -294,16 +284,6 @@ class Iface(Interface):
     
     Parameters:
      - keyspace
-    """
-    pass
-
-  def system_rename_keyspace(old_name, new_name):
-    """
-    renames a keyspace. returns the new schema id.
-    
-    Parameters:
-     - old_name
-     - new_name
     """
     pass
 
@@ -977,6 +957,8 @@ class Client:
     iprot.readMessageEnd()
     if result.success != None:
       return d.callback(result.success)
+    if result.ire != None:
+      return d.errback(result.ire)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspaces failed: unknown result"))
 
   def describe_cluster_name(self, ):
@@ -1182,6 +1164,8 @@ class Client:
       return d.callback(result.success)
     if result.nfe != None:
       return d.errback(result.nfe)
+    if result.ire != None:
+      return d.errback(result.ire)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "describe_keyspace failed: unknown result"))
 
   def describe_splits(self, cfName, start_token, end_token, keys_per_split):
@@ -1303,45 +1287,6 @@ class Client:
       return d.errback(result.ire)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_column_family failed: unknown result"))
 
-  def system_rename_column_family(self, old_name, new_name):
-    """
-    renames a column family. returns the new schema id.
-    
-    Parameters:
-     - old_name
-     - new_name
-    """
-    self._seqid += 1
-    d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_system_rename_column_family(old_name, new_name)
-    return d
-
-  def send_system_rename_column_family(self, old_name, new_name):
-    oprot = self._oprot_factory.getProtocol(self._transport)
-    oprot.writeMessageBegin('system_rename_column_family', TMessageType.CALL, self._seqid)
-    args = system_rename_column_family_args()
-    args.old_name = old_name
-    args.new_name = new_name
-    args.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def recv_system_rename_column_family(self, iprot, mtype, rseqid):
-    d = self._reqs.pop(rseqid)
-    if mtype == TMessageType.EXCEPTION:
-      x = TApplicationException()
-      x.read(iprot)
-      iprot.readMessageEnd()
-      return d.errback(x)
-    result = system_rename_column_family_result()
-    result.read(iprot)
-    iprot.readMessageEnd()
-    if result.success != None:
-      return d.callback(result.success)
-    if result.ire != None:
-      return d.errback(result.ire)
-    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_column_family failed: unknown result"))
-
   def system_add_keyspace(self, ks_def):
     """
     adds a keyspace and any column families that are part of it. returns the new schema id.
@@ -1415,45 +1360,6 @@ class Client:
     if result.ire != None:
       return d.errback(result.ire)
     return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_drop_keyspace failed: unknown result"))
-
-  def system_rename_keyspace(self, old_name, new_name):
-    """
-    renames a keyspace. returns the new schema id.
-    
-    Parameters:
-     - old_name
-     - new_name
-    """
-    self._seqid += 1
-    d = self._reqs[self._seqid] = defer.Deferred()
-    self.send_system_rename_keyspace(old_name, new_name)
-    return d
-
-  def send_system_rename_keyspace(self, old_name, new_name):
-    oprot = self._oprot_factory.getProtocol(self._transport)
-    oprot.writeMessageBegin('system_rename_keyspace', TMessageType.CALL, self._seqid)
-    args = system_rename_keyspace_args()
-    args.old_name = old_name
-    args.new_name = new_name
-    args.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def recv_system_rename_keyspace(self, iprot, mtype, rseqid):
-    d = self._reqs.pop(rseqid)
-    if mtype == TMessageType.EXCEPTION:
-      x = TApplicationException()
-      x.read(iprot)
-      iprot.readMessageEnd()
-      return d.errback(x)
-    result = system_rename_keyspace_result()
-    result.read(iprot)
-    iprot.readMessageEnd()
-    if result.success != None:
-      return d.callback(result.success)
-    if result.ire != None:
-      return d.errback(result.ire)
-    return d.errback(TApplicationException(TApplicationException.MISSING_RESULT, "system_rename_keyspace failed: unknown result"))
 
   def system_update_keyspace(self, ks_def):
     """
@@ -1560,10 +1466,8 @@ class Processor(TProcessor):
     self._processMap["describe_splits"] = Processor.process_describe_splits
     self._processMap["system_add_column_family"] = Processor.process_system_add_column_family
     self._processMap["system_drop_column_family"] = Processor.process_system_drop_column_family
-    self._processMap["system_rename_column_family"] = Processor.process_system_rename_column_family
     self._processMap["system_add_keyspace"] = Processor.process_system_add_keyspace
     self._processMap["system_drop_keyspace"] = Processor.process_system_drop_keyspace
-    self._processMap["system_rename_keyspace"] = Processor.process_system_rename_keyspace
     self._processMap["system_update_keyspace"] = Processor.process_system_update_keyspace
     self._processMap["system_update_column_family"] = Processor.process_system_update_column_family
 
@@ -2012,10 +1916,21 @@ class Processor(TProcessor):
     result = describe_keyspaces_result()
     d = defer.maybeDeferred(self._handler.describe_keyspaces, )
     d.addCallback(self.write_results_success_describe_keyspaces, result, seqid, oprot)
+    d.addErrback(self.write_results_exception_describe_keyspaces, result, seqid, oprot)
     return d
 
   def write_results_success_describe_keyspaces(self, success, result, seqid, oprot):
     result.success = success
+    oprot.writeMessageBegin("describe_keyspaces", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def write_results_exception_describe_keyspaces(self, error, result, seqid, oprot):
+    try:
+      error.raiseException()
+    except InvalidRequestException, ire:
+      result.ire = ire
     oprot.writeMessageBegin("describe_keyspaces", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -2134,6 +2049,8 @@ class Processor(TProcessor):
       error.raiseException()
     except NotFoundException, nfe:
       result.nfe = nfe
+    except InvalidRequestException, ire:
+      result.ire = ire
     oprot.writeMessageBegin("describe_keyspace", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -2209,33 +2126,6 @@ class Processor(TProcessor):
     oprot.writeMessageEnd()
     oprot.trans.flush()
 
-  def process_system_rename_column_family(self, seqid, iprot, oprot):
-    args = system_rename_column_family_args()
-    args.read(iprot)
-    iprot.readMessageEnd()
-    result = system_rename_column_family_result()
-    d = defer.maybeDeferred(self._handler.system_rename_column_family, args.old_name, args.new_name)
-    d.addCallback(self.write_results_success_system_rename_column_family, result, seqid, oprot)
-    d.addErrback(self.write_results_exception_system_rename_column_family, result, seqid, oprot)
-    return d
-
-  def write_results_success_system_rename_column_family(self, success, result, seqid, oprot):
-    result.success = success
-    oprot.writeMessageBegin("system_rename_column_family", TMessageType.REPLY, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def write_results_exception_system_rename_column_family(self, error, result, seqid, oprot):
-    try:
-      error.raiseException()
-    except InvalidRequestException, ire:
-      result.ire = ire
-    oprot.writeMessageBegin("system_rename_column_family", TMessageType.REPLY, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
   def process_system_add_keyspace(self, seqid, iprot, oprot):
     args = system_add_keyspace_args()
     args.read(iprot)
@@ -2286,33 +2176,6 @@ class Processor(TProcessor):
     except InvalidRequestException, ire:
       result.ire = ire
     oprot.writeMessageBegin("system_drop_keyspace", TMessageType.REPLY, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def process_system_rename_keyspace(self, seqid, iprot, oprot):
-    args = system_rename_keyspace_args()
-    args.read(iprot)
-    iprot.readMessageEnd()
-    result = system_rename_keyspace_result()
-    d = defer.maybeDeferred(self._handler.system_rename_keyspace, args.old_name, args.new_name)
-    d.addCallback(self.write_results_success_system_rename_keyspace, result, seqid, oprot)
-    d.addErrback(self.write_results_exception_system_rename_keyspace, result, seqid, oprot)
-    return d
-
-  def write_results_success_system_rename_keyspace(self, success, result, seqid, oprot):
-    result.success = success
-    oprot.writeMessageBegin("system_rename_keyspace", TMessageType.REPLY, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def write_results_exception_system_rename_keyspace(self, error, result, seqid, oprot):
-    try:
-      error.raiseException()
-    except InvalidRequestException, ire:
-      result.ire = ire
-    oprot.writeMessageBegin("system_rename_keyspace", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -4830,14 +4693,17 @@ class describe_keyspaces_result:
   """
   Attributes:
    - success
+   - ire
   """
 
   thrift_spec = (
     (0, TType.LIST, 'success', (TType.STRUCT,(KsDef, KsDef.thrift_spec)), None, ), # 0
+    (1, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 1
   )
 
-  def __init__(self, success=None,):
+  def __init__(self, success=None, ire=None,):
     self.success = success
+    self.ire = ire
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -4859,6 +4725,12 @@ class describe_keyspaces_result:
           iprot.readListEnd()
         else:
           iprot.skip(ftype)
+      elif fid == 1:
+        if ftype == TType.STRUCT:
+          self.ire = InvalidRequestException()
+          self.ire.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -4875,6 +4747,10 @@ class describe_keyspaces_result:
       for iter174 in self.success:
         iter174.write(oprot)
       oprot.writeListEnd()
+      oprot.writeFieldEnd()
+    if self.ire != None:
+      oprot.writeFieldBegin('ire', TType.STRUCT, 1)
+      self.ire.write(oprot)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
@@ -5456,16 +5332,19 @@ class describe_keyspace_result:
   Attributes:
    - success
    - nfe
+   - ire
   """
 
   thrift_spec = (
     (0, TType.STRUCT, 'success', (KsDef, KsDef.thrift_spec), None, ), # 0
     (1, TType.STRUCT, 'nfe', (NotFoundException, NotFoundException.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 2
   )
 
-  def __init__(self, success=None, nfe=None,):
+  def __init__(self, success=None, nfe=None, ire=None,):
     self.success = success
     self.nfe = nfe
+    self.ire = ire
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -5488,6 +5367,12 @@ class describe_keyspace_result:
           self.nfe.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.STRUCT:
+          self.ire = InvalidRequestException()
+          self.ire.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -5505,6 +5390,10 @@ class describe_keyspace_result:
     if self.nfe != None:
       oprot.writeFieldBegin('nfe', TType.STRUCT, 1)
       self.nfe.write(oprot)
+      oprot.writeFieldEnd()
+    if self.ire != None:
+      oprot.writeFieldBegin('ire', TType.STRUCT, 2)
+      self.ire.write(oprot)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
@@ -5924,142 +5813,6 @@ class system_drop_column_family_result:
   def __ne__(self, other):
     return not (self == other)
 
-class system_rename_column_family_args:
-  """
-  Attributes:
-   - old_name
-   - new_name
-  """
-
-  thrift_spec = (
-    None, # 0
-    (1, TType.STRING, 'old_name', None, None, ), # 1
-    (2, TType.STRING, 'new_name', None, None, ), # 2
-  )
-
-  def __init__(self, old_name=None, new_name=None,):
-    self.old_name = old_name
-    self.new_name = new_name
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 1:
-        if ftype == TType.STRING:
-          self.old_name = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      elif fid == 2:
-        if ftype == TType.STRING:
-          self.new_name = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('system_rename_column_family_args')
-    if self.old_name != None:
-      oprot.writeFieldBegin('old_name', TType.STRING, 1)
-      oprot.writeString(self.old_name)
-      oprot.writeFieldEnd()
-    if self.new_name != None:
-      oprot.writeFieldBegin('new_name', TType.STRING, 2)
-      oprot.writeString(self.new_name)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
-class system_rename_column_family_result:
-  """
-  Attributes:
-   - success
-   - ire
-  """
-
-  thrift_spec = (
-    (0, TType.STRING, 'success', None, None, ), # 0
-    (1, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 1
-  )
-
-  def __init__(self, success=None, ire=None,):
-    self.success = success
-    self.ire = ire
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 0:
-        if ftype == TType.STRING:
-          self.success = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      elif fid == 1:
-        if ftype == TType.STRUCT:
-          self.ire = InvalidRequestException()
-          self.ire.read(iprot)
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('system_rename_column_family_result')
-    if self.success != None:
-      oprot.writeFieldBegin('success', TType.STRING, 0)
-      oprot.writeString(self.success)
-      oprot.writeFieldEnd()
-    if self.ire != None:
-      oprot.writeFieldBegin('ire', TType.STRUCT, 1)
-      self.ire.write(oprot)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
 class system_add_keyspace_args:
   """
   Attributes:
@@ -6287,142 +6040,6 @@ class system_drop_keyspace_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('system_drop_keyspace_result')
-    if self.success != None:
-      oprot.writeFieldBegin('success', TType.STRING, 0)
-      oprot.writeString(self.success)
-      oprot.writeFieldEnd()
-    if self.ire != None:
-      oprot.writeFieldBegin('ire', TType.STRUCT, 1)
-      self.ire.write(oprot)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
-class system_rename_keyspace_args:
-  """
-  Attributes:
-   - old_name
-   - new_name
-  """
-
-  thrift_spec = (
-    None, # 0
-    (1, TType.STRING, 'old_name', None, None, ), # 1
-    (2, TType.STRING, 'new_name', None, None, ), # 2
-  )
-
-  def __init__(self, old_name=None, new_name=None,):
-    self.old_name = old_name
-    self.new_name = new_name
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 1:
-        if ftype == TType.STRING:
-          self.old_name = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      elif fid == 2:
-        if ftype == TType.STRING:
-          self.new_name = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('system_rename_keyspace_args')
-    if self.old_name != None:
-      oprot.writeFieldBegin('old_name', TType.STRING, 1)
-      oprot.writeString(self.old_name)
-      oprot.writeFieldEnd()
-    if self.new_name != None:
-      oprot.writeFieldBegin('new_name', TType.STRING, 2)
-      oprot.writeString(self.new_name)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
-class system_rename_keyspace_result:
-  """
-  Attributes:
-   - success
-   - ire
-  """
-
-  thrift_spec = (
-    (0, TType.STRING, 'success', None, None, ), # 0
-    (1, TType.STRUCT, 'ire', (InvalidRequestException, InvalidRequestException.thrift_spec), None, ), # 1
-  )
-
-  def __init__(self, success=None, ire=None,):
-    self.success = success
-    self.ire = ire
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 0:
-        if ftype == TType.STRING:
-          self.success = iprot.readString();
-        else:
-          iprot.skip(ftype)
-      elif fid == 1:
-        if ftype == TType.STRUCT:
-          self.ire = InvalidRequestException()
-          self.ire.read(iprot)
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('system_rename_keyspace_result')
     if self.success != None:
       oprot.writeFieldBegin('success', TType.STRING, 0)
       oprot.writeString(self.success)

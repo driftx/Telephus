@@ -25,7 +25,6 @@ class ConsistencyLevel:
   important than consistency then you can use lower values for either or both.
   
   Write consistency levels make the following guarantees before reporting success to the client:
-    ZERO         Ensure nothing. A write happens asynchronously in background
     ANY          Ensure that the write has been written once somewhere, including possibly being hinted in a non-target node.
     ONE          Ensure that the write has been written to at least 1 node's commit log and memory table
     QUORUM       Ensure that the write has been written to <ReplicationFactor> / 2 + 1 nodes
@@ -34,7 +33,6 @@ class ConsistencyLevel:
     ALL          Ensure that the write is written to <code>&lt;ReplicationFactor&gt;</code> nodes before responding to the client.
   
   Read:
-    ZERO         Not supported, because it doesn't make sense.
     ANY          Not supported. You probably want ONE instead.
     ONE          Will return the record returned by the first node to respond. A consistency check is always done in a background thread to fix any consistency issues when ConsistencyLevel.ONE is used. This means subsequent calls will have correct data even if the initial read gets an older value. (This is called 'read repair'.)
     QUORUM       Will query all storage nodes and return the record with the most recent timestamp once it has at least a majority of replicas reported. Again, the remaining replicas will be checked in the background.
@@ -42,7 +40,6 @@ class ConsistencyLevel:
     DCQUORUMSYNC Returns the record with the most recent timestamp once a majority of replicas within each datacenter have replied.
     ALL          Queries all storage nodes and returns the record with the most recent timestamp.
   """
-  ZERO = 0
   ONE = 1
   QUORUM = 2
   DCQUORUM = 3
@@ -51,7 +48,6 @@ class ConsistencyLevel:
   ANY = 6
 
   _VALUES_TO_NAMES = {
-    0: "ZERO",
     1: "ONE",
     2: "QUORUM",
     3: "DCQUORUM",
@@ -61,7 +57,6 @@ class ConsistencyLevel:
   }
 
   _NAMES_TO_VALUES = {
-    "ZERO": 0,
     "ONE": 1,
     "QUORUM": 2,
     "DCQUORUM": 3,
@@ -1893,6 +1888,11 @@ class CfDef:
    - id
    - min_compaction_threshold
    - max_compaction_threshold
+   - row_cache_save_period_in_seconds
+   - key_cache_save_period_in_seconds
+   - memtable_flush_after_mins
+   - memtable_throughput_in_mb
+   - memtable_operations_in_millions
   """
 
   thrift_spec = (
@@ -1915,9 +1915,14 @@ class CfDef:
     (16, TType.I32, 'id', None, None, ), # 16
     (17, TType.I32, 'min_compaction_threshold', None, None, ), # 17
     (18, TType.I32, 'max_compaction_threshold', None, None, ), # 18
+    (19, TType.I32, 'row_cache_save_period_in_seconds', None, None, ), # 19
+    (20, TType.I32, 'key_cache_save_period_in_seconds', None, None, ), # 20
+    (21, TType.I32, 'memtable_flush_after_mins', None, None, ), # 21
+    (22, TType.I32, 'memtable_throughput_in_mb', None, None, ), # 22
+    (23, TType.DOUBLE, 'memtable_operations_in_millions', None, None, ), # 23
   )
 
-  def __init__(self, keyspace=None, name=None, column_type=thrift_spec[3][4], comparator_type=thrift_spec[5][4], subcomparator_type=None, comment=None, row_cache_size=thrift_spec[9][4], preload_row_cache=thrift_spec[10][4], key_cache_size=thrift_spec[11][4], read_repair_chance=thrift_spec[12][4], column_metadata=None, gc_grace_seconds=None, default_validation_class=None, id=None, min_compaction_threshold=None, max_compaction_threshold=None,):
+  def __init__(self, keyspace=None, name=None, column_type=thrift_spec[3][4], comparator_type=thrift_spec[5][4], subcomparator_type=None, comment=None, row_cache_size=thrift_spec[9][4], preload_row_cache=thrift_spec[10][4], key_cache_size=thrift_spec[11][4], read_repair_chance=thrift_spec[12][4], column_metadata=None, gc_grace_seconds=None, default_validation_class=None, id=None, min_compaction_threshold=None, max_compaction_threshold=None, row_cache_save_period_in_seconds=None, key_cache_save_period_in_seconds=None, memtable_flush_after_mins=None, memtable_throughput_in_mb=None, memtable_operations_in_millions=None,):
     self.keyspace = keyspace
     self.name = name
     self.column_type = column_type
@@ -1934,6 +1939,11 @@ class CfDef:
     self.id = id
     self.min_compaction_threshold = min_compaction_threshold
     self.max_compaction_threshold = max_compaction_threshold
+    self.row_cache_save_period_in_seconds = row_cache_save_period_in_seconds
+    self.key_cache_save_period_in_seconds = key_cache_save_period_in_seconds
+    self.memtable_flush_after_mins = memtable_flush_after_mins
+    self.memtable_throughput_in_mb = memtable_throughput_in_mb
+    self.memtable_operations_in_millions = memtable_operations_in_millions
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -2030,6 +2040,31 @@ class CfDef:
           self.max_compaction_threshold = iprot.readI32();
         else:
           iprot.skip(ftype)
+      elif fid == 19:
+        if ftype == TType.I32:
+          self.row_cache_save_period_in_seconds = iprot.readI32();
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.I32:
+          self.key_cache_save_period_in_seconds = iprot.readI32();
+        else:
+          iprot.skip(ftype)
+      elif fid == 21:
+        if ftype == TType.I32:
+          self.memtable_flush_after_mins = iprot.readI32();
+        else:
+          iprot.skip(ftype)
+      elif fid == 22:
+        if ftype == TType.I32:
+          self.memtable_throughput_in_mb = iprot.readI32();
+        else:
+          iprot.skip(ftype)
+      elif fid == 23:
+        if ftype == TType.DOUBLE:
+          self.memtable_operations_in_millions = iprot.readDouble();
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -2106,6 +2141,26 @@ class CfDef:
     if self.max_compaction_threshold != None:
       oprot.writeFieldBegin('max_compaction_threshold', TType.I32, 18)
       oprot.writeI32(self.max_compaction_threshold)
+      oprot.writeFieldEnd()
+    if self.row_cache_save_period_in_seconds != None:
+      oprot.writeFieldBegin('row_cache_save_period_in_seconds', TType.I32, 19)
+      oprot.writeI32(self.row_cache_save_period_in_seconds)
+      oprot.writeFieldEnd()
+    if self.key_cache_save_period_in_seconds != None:
+      oprot.writeFieldBegin('key_cache_save_period_in_seconds', TType.I32, 20)
+      oprot.writeI32(self.key_cache_save_period_in_seconds)
+      oprot.writeFieldEnd()
+    if self.memtable_flush_after_mins != None:
+      oprot.writeFieldBegin('memtable_flush_after_mins', TType.I32, 21)
+      oprot.writeI32(self.memtable_flush_after_mins)
+      oprot.writeFieldEnd()
+    if self.memtable_throughput_in_mb != None:
+      oprot.writeFieldBegin('memtable_throughput_in_mb', TType.I32, 22)
+      oprot.writeI32(self.memtable_throughput_in_mb)
+      oprot.writeFieldEnd()
+    if self.memtable_operations_in_millions != None:
+      oprot.writeFieldBegin('memtable_operations_in_millions', TType.DOUBLE, 23)
+      oprot.writeDouble(self.memtable_operations_in_millions)
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
