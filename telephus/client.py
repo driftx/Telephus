@@ -1,4 +1,4 @@
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 from telephus.cassandra.ttypes import *
 from telephus.protocol import ManagedThriftRequest
 from collections import defaultdict
@@ -37,6 +37,9 @@ class CassandraClient(object):
         while not agreement:
             result = yield self.describe_schema_versions()
             agreement = len(result) == 1
+            d = defer.Deferred()
+            reactor.callLater(0.1, d.callback, True)
+            yield d
             
     @defer.inlineCallbacks
     def _push_system_request(self,req,retries=None,block=True):
