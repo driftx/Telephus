@@ -1,3 +1,20 @@
+python-telephus (0.7~beta3.1) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + allow defer.fail to get current traceback
+    + improvements to test suite
+    + bump dependency to thrift 0.5.0
+    + update thrift interface to match cassandra 0.7~beta3
+    + ease python-twisted requirement to python-twisted-core
+  * Brandon Williams <brandon@riptano.com>:
+    + dialed back schema agreement check rate
+    + improvements to test suite
+  * Matthew Williams <mwilliams@domU-12-31-39-0A-2C-67.compute-1.internal>:
+    + added schema agreement check to system_* calls
+    + implemented get_indexed_slices & disabled test_bad_params
+
+ -- paul cannon <paul@riptano.com>  Wed, 03 Nov 2010 17:18:29 -0500
+
 python-telephus (0.7~beta3) unstable; urgency=low
 
   * Brandon Williams <brandon@riptano.com>:
