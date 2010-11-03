@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Brandon Williams <brandon@faltering.com>
 Uploaders: paul cannon <paul@riptano.com>
 Build-Depends: debhelper (>= 7), python-support (>= 0.5.6)
-Standards-Version: 3.7.2
+Standards-Version: 3.9.1
 
 Package: python-telephus
 Architecture: all
