@@ -8,7 +8,7 @@ Standards-Version: 3.7.2
 
 Package: python-telephus
 Architecture: all
-Depends: ${python:Depends}, python-twisted-core (>= 8.1.0), python-thrift (>= 0.5.0)
+Depends: ${python:Depends}, ${misc:Depends}, python-twisted-core (>= 8.1.0), python-thrift (>= 0.5.0)
 Provides: ${python:Provides}
 Description: twisted python client library for Cassandra
  Telephus is a connection pooled, low-level client API for Cassandra in Twisted
