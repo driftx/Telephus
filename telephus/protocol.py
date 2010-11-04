@@ -3,7 +3,7 @@ from thrift.protocol import TBinaryProtocol
 from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
-from telephus.cassandra import Cassandra
+from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
 
 class ClientBusy(Exception):
@@ -12,30 +12,41 @@ class ClientBusy(Exception):
 class InvalidThriftRequest(Exception):
     pass
 
+class APIMismatch(Exception):
+    pass
+
 class ManagedThriftRequest(object):
     def __init__(self, method, *args):
         self.method = method 
         self.args = args
 
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
+    # override this class attribute to get API checks on all connections
+    # by default
+    check_api_version = False
+
     def __init__(self, client_class, iprot_factory, oprot_factory=None, keyspace=None):
         TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
         self.deferred = None
         self.aborted = False
         self.keyspace = keyspace
-        
+
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.client.protocol = self
+        d = defer.succeed(True)
+        if self.check_api_version:
+            d.addCallback(lambda _: self.client.describe_version())
+            def gotVersion(ver):
+                if ver != constants.VERSION:
+                    raise APIMismatch('%s remote != %s telephus' % (ver, constants.VERSION))
+                return True
+            d.addCallback(gotVersion)
         if self.keyspace:
-            d = self.client.set_keyspace(self.keyspace)
-            def keyspaceok(res):
-                self.factory.clientIdle(self, res)
-            d.addCallback(keyspaceok)
-            d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
-        else: 
-            self.factory.clientIdle(self)
-        
+            d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
+        d.addCallback(lambda res: self.factory.clientIdle(self, res))
+        d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
+
     def connectionLost(self, reason=None):
         if not self.aborted: # don't allow parent class to raise unhandled TTransport
                              # exceptions, the manager handled our failure
@@ -84,8 +95,9 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
+    check_api_version = False
 
-    def __init__(self, keyspace=None, retries=0, credentials={}):
+    def __init__(self, keyspace=None, retries=0, credentials={}, check_api_version=False):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
@@ -96,6 +108,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.credentials = credentials
         if credentials:
             self.protocol = AuthenticatedThriftClientProtocol
+        self.check_api_version = check_api_version
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -128,6 +141,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                               self.thriftFactory(),
                               keyspace=self.keyspace)
         p.factory = self
+        if self.check_api_version:
+            p.check_api_version = self.check_api_version
         self.resetDelay()
         return p
 
