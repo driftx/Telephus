@@ -32,7 +32,7 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             def keyspaceok(res):
                 self.factory.clientIdle(self, res)
             d.addCallback(keyspaceok)
-            d.addErrback(self.factory.clientConnectionFailed, self)
+            d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
         else: 
             self.factory.clientIdle(self)
         
@@ -78,7 +78,7 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
             ManagedThriftClientProtocol.connectionMade(self)
         d = self.client.login(AuthenticationRequest(credentials=self.credentials))
         d.addCallback(loginok)
-        d.addErrback(self.factory.clientConnectionFailed, self)
+        d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
         
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
