@@ -1,8 +1,9 @@
 from twisted.trial import unittest
 from twisted.python.failure import Failure
-from twisted.internet import defer, reactor
-from telephus.protocol import ManagedCassandraClientFactory
+from twisted.internet import defer, reactor, error
+from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
+from telephus.cassandra import constants
 from telephus.cassandra.ttypes import *
 import os
 
@@ -276,3 +277,43 @@ class CassandraClientTest(unittest.TestCase):
             except Exception, e:
                 pass
     test_bad_params.skip = "Disabled pending further investigation..."
+
+class ManagedCassandraClientFactoryTest(unittest.TestCase):
+    @defer.inlineCallbacks
+    def test_initial_connection_failure(self):
+        cmanager = ManagedCassandraClientFactory()
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        reactor.connectTCP('nonexistent-host.000-', PORT, cmanager)
+        yield self.assertFailure(d, error.DNSLookupError)
+        cmanager.shutdown()
+
+    @defer.inlineCallbacks
+    def test_api_check(self):
+        cmanager = ManagedCassandraClientFactory(check_api_version=False)
+        client = CassandraClient(cmanager)
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        # we don't necessarily want to force an api match while testing;
+        # get the remote value and pretend ours matches, even if it doesn't
+        ver = yield client.describe_version()
+        cmanager.shutdown()
+
+        constants.VERSION = ver
+        cmanager = ManagedCassandraClientFactory(check_api_version=True)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield d
+        # do something innocuous, make sure connection is good
+        yield client.describe_schema_versions()
+        cmanager.shutdown()
+
+    @defer.inlineCallbacks
+    def test_api_mismatch(self):
+        cmanager = ManagedCassandraClientFactory(check_api_version=True)
+        constants.VERSION = 'FakeMismatchVersion'
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield self.assertFailure(d, APIMismatch)
+        cmanager.shutdown()
