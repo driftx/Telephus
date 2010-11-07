@@ -34,6 +34,13 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.client.protocol = self
+        d = self.setupConnection()
+        d.addCallbacks(
+            (lambda res: self.factory.clientIdle(self, res)),
+            self.setupFailed
+        )
+
+    def setupConnection(self):
         d = defer.succeed(True)
         if self.check_api_version:
             d.addCallback(lambda _: self.client.describe_version())
@@ -44,8 +51,11 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             d.addCallback(gotVersion)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
-        d.addCallback(lambda res: self.factory.clientIdle(self, res))
-        d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
+        return d
+
+    def setupFailed(self, err):
+        self.transport.loseConnection()
+        self.factory.clientSetupFailed(err)
 
     def connectionLost(self, reason=None):
         if not self.aborted: # don't allow parent class to raise unhandled TTransport
@@ -81,16 +91,12 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         self.deferred = None
         self.keyspace = keyspace
         self.credentials = credentials
-        
-    def connectionMade(self):
-        TTwisted.ThriftClientProtocol.connectionMade(self)
-        self.client.protocol = self
-        def loginok(res):
-            ManagedThriftClientProtocol.connectionMade(self)
+
+    def setupConnection(self):
         d = self.client.login(AuthenticationRequest(credentials=self.credentials))
-        d.addCallback(loginok)
-        d.addErrback(lambda err: self.factory.clientConnectionFailed(self, err))
-        
+        d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(self))
+        return d
+
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 5
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
@@ -119,9 +125,12 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         if self.deferred:
             self.deferred.callback(value)
             self.deferred = None
-            
+
     def clientConnectionFailed(self, connector, reason):
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+        self._errback(reason)
+
+    def clientSetupFailed(self, reason):
         self._errback(reason)
 
     def clientIdle(self, proto, result=True):
@@ -147,7 +156,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         return p
 
     def clientGone(self, proto):
-        self._protos.remove(proto)
+        try:
+            self._protos.remove(proto)
+        except ValueError:
+            pass
         
     def set_keyspace(self, keyspace):
         """ switch all connections to another keyspace """
