@@ -87,9 +87,7 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
     def __init__(self, client_class, keyspace, credentials, iprot_factory, oprot_factory=None):
-        TTwisted.ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
-        self.deferred = None
-        self.keyspace = keyspace
+        ManagedThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory, keyspace=keyspace)
         self.credentials = credentials
 
     def setupConnection(self):
