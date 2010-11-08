@@ -20,6 +20,20 @@ class ManagedThriftRequest(object):
         self.method = method 
         self.args = args
 
+def match_thrift_version(ourversion, remoteversion):
+    """
+    Try to determine if the remote thrift api version is likely to work the
+    way we expect it to. A mismatch in major version number will definitely
+    break, but a mismatch in minor version is probably ok if the remote side
+    is higher (it should be backwards compatible). A change in the patch
+    number should not affect anything noticeable.
+    """
+
+    r_major, r_minor, r_patch = map(int, remoteversion.split('.'))
+    o_major, o_minor, o_patch = map(int, ourversion.split('.'))
+    return (r_major == o_major) and \
+           (r_minor >= o_minor)
+
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     # override this class attribute to get API checks on all connections
     # by default
@@ -45,8 +59,9 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         if self.check_api_version:
             d.addCallback(lambda _: self.client.describe_version())
             def gotVersion(ver):
-                if ver != constants.VERSION:
-                    raise APIMismatch('%s remote != %s telephus' % (ver, constants.VERSION))
+                if not match_thrift_version(constants.VERSION, ver):
+                    raise APIMismatch('%s remote is not compatible with %s telephus'
+                                      % (ver, constants.VERSION))
                 return True
             d.addCallback(gotVersion)
         if self.keyspace:
