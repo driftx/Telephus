@@ -311,7 +311,7 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
     @defer.inlineCallbacks
     def test_api_mismatch(self):
         cmanager = ManagedCassandraClientFactory(check_api_version=True)
-        constants.VERSION = 'FakeMismatchVersion'
+        constants.VERSION = '0.0.0'
         client = CassandraClient(cmanager)
         d = cmanager.deferred
         conn = reactor.connectTCP(HOST, PORT, cmanager)
