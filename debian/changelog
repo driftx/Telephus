@@ -1,3 +1,12 @@
+python-telephus (0.7~beta3.3) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + update thrift interface to match cassandra 0.7 pre-rc
+    + accept backward-compatible api ver mismatches when
+      check_api_version is True
+
+ -- paul cannon <paul@riptano.com>  Mon, 08 Nov 2010 16:02:38 -0600
+
 python-telephus (0.7~beta3.2) unstable; urgency=low
 
   * paul cannon <paul@riptano.com>:
