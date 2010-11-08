@@ -1,3 +1,11 @@
+python-telephus (0.7~beta3.2) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + fix connection failure handling
+    + optionally check for matching API ver on connect
+
+ -- paul cannon <paul@riptano.com>  Mon, 08 Nov 2010 14:54:37 -0600
+
 python-telephus (0.7~beta3.1) unstable; urgency=low
 
   * paul cannon <paul@riptano.com>:
