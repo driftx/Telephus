@@ -1,3 +1,11 @@
+python-telephus (0.7~rc2) unstable; urgency=low
+
+  * Brandon Williams <brandon@riptano.com>:
+    + Update example.py
+    + Kwargify args
+
+ -- paul cannon <paul@riptano.com>  Thu, 16 Dec 2010 14:39:13 -0600
+
 python-telephus (0.7~beta3.3) unstable; urgency=low
 
   * paul cannon <paul@riptano.com>:
