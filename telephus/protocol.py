@@ -48,11 +48,8 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.client.protocol = self
-        d = self.setupConnection()
-        d.addCallbacks(
-            (lambda res: self.factory.clientIdle(self, res)),
-            self.setupFailed
-        )
+        self.setupConnection() \
+            .addCallbacks(self.setupComplete, self.setupFailed)
 
     def setupConnection(self):
         d = defer.succeed(True)
@@ -67,6 +64,10 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
         return d
+
+    def setupComplete(self, res=None):
+        self.factory.resetDelay()
+        self.factory.clientIdle(self, res)
 
     def setupFailed(self, err):
         self.transport.loseConnection()
@@ -111,7 +112,7 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         return d
 
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
-    maxDelay = 5
+    maxDelay = 45
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
     check_api_version = False
@@ -165,7 +166,6 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         p.factory = self
         if self.check_api_version:
             p.check_api_version = self.check_api_version
-        self.resetDelay()
         return p
 
     def clientGone(self, proto):
