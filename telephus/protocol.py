@@ -3,8 +3,10 @@ from thrift.protocol import TBinaryProtocol
 from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
+from twisted.python import failure
 from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
+from sys import exc_info
 
 class ClientBusy(Exception):
     pass
@@ -194,6 +196,15 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         def reqError(err, req, d, r):
             if isinstance(err, InvalidRequestException) or \
                isinstance(err, InvalidThriftRequest) or r < 1:
+                if err.tb is None:
+                    try:
+                        raise err.value
+                    except Exception:
+                        # make new Failure object explicitly, so that the same
+                        # (traceback-less) one made by Thrift won't be retained
+                        # and useful tracebacks thrown away
+                        t, v, tb = exc_info()
+                        err = failure.Failure(v, t, tb)
                 d.errback(err)
                 self._pending.remove(d)
             else:
