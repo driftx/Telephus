@@ -1,3 +1,11 @@
+python-telephus (0.7~rc3) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + avoid twisted's overly eager traceback trimming
+    + fix reconnecting time backoff
+
+ -- paul cannon <paul@riptano.com>  Tue, 25 Jan 2011 21:52:32 -0600
+
 python-telephus (0.7~rc2) unstable; urgency=low
 
   * Brandon Williams <brandon@riptano.com>:
