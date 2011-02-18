@@ -194,8 +194,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
-            if isinstance(err, InvalidRequestException) or \
-               isinstance(err, InvalidThriftRequest) or r < 1:
+            if err.check(InvalidRequestException, InvalidThriftRequest) or r < 1:
                 if err.tb is None:
                     try:
                         raise err.value
