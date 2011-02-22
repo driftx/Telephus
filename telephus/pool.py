@@ -85,12 +85,24 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.my_proto is not None
 
 class CassandraNode:
-    # Maximum age of history entries to keep
+    """
+    Represent a Cassandra node, in the same sense Cassandra uses.
+
+    Keep track of connection success and failure history for some time, so
+    that smarter decisions can be made about where to make new connections
+    within a pool.
+
+    Implement exponential backoff in reconnect time when connections fail.
+
+    @ivar history_interval: Keep history entries for at least this many seconds
+
+    @ivar max_delay: Forced delay between connection attempts will not exceed
+        this value (although actual connection attempts may be farther apart
+        than this, if the pool has enough connections without it)
+    """
+
     history_interval = 86400
-
-    # Maximum delay between connection attempts
     max_delay = 600
-
     initial_delay = 0.5
 
     # NIST backoff factors
@@ -107,14 +119,25 @@ class CassandraNode:
         # (timestamp, None) tuples will be inserted on a successful connection.
         self.history = []
 
+    def record_hist(self, value):
+        now = time()
+        if self.history and self.history[0][0] < (now - self.history_interval * 2):
+            # it has been 2x history_interval; prune history
+            cutoff = now - self.history_interval
+            for n, (tstamp, hval) in enumerate(self.history):
+                if tstamp > cutoff:
+                    break
+            self.history = self.history[n:]
+        self.history.append((now, value))
+
     def conn_success(self):
         self.reconnect_delay = self.initial_delay
         self.can_reconnect_at = 0
-        self.history.append((time(), None))
+        self.record_hist(None)
 
     def conn_fail(self, reason):
         now = time()
-        self.history.append((now, reason.value))
+        self.record_hist(reason.value)
         newdelay = min(self.reconnect_delay * self.factor, self.max_delay)
         if self.jitter:
             newdelay = random.normalvariate(newdelay, newdelay * self.jitter)
