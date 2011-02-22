@@ -146,11 +146,11 @@ class CassandraClient(object):
 
     @requirekwargs('key', 'column_family', 'value')
     def insert(self, key=None, column_family=None, value=None, column=None, super_column=None,
-               timestamp=None, consistency=None, retries=None):
+               timestamp=None, consistency=None, retries=None, ttl=None):
         timestamp = timestamp or self._time()
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('insert', key, cp, Column(column, value, timestamp), consistency)
+        req = ManagedThriftRequest('insert', key, cp, Column(column, value, timestamp, ttl), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
@@ -164,12 +164,12 @@ class CassandraClient(object):
 
     @requirekwargs('key', 'column_family', 'mapping')
     def batch_insert(self, key=None, column_family=None, mapping=None, timestamp=None,
-                     consistency=None, retries=None):
+                     consistency=None, retries=None, ttl=None):
         if isinstance(mapping, list) and timestamp is not None:
             raise RuntimeError('Timestamp cannot be specified with a list of Mutations')
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
-        mutmap = {key: {column_family: self._mk_cols_or_supers(mapping, timestamp)}}
+        mutmap = {key: {column_family: self._mk_cols_or_supers(mapping, timestamp, ttl)}}
         return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency,
                                  retries=retries)
     
@@ -188,13 +188,13 @@ class CassandraClient(object):
         return self.manager.pushRequest(req, retries=retries)
     
     @requirekwargs('mutationmap')
-    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None, retries=None):
+    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None, retries=None, ttl=None):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
         for key, cfmap in mutationmap.iteritems():
             for cf, colmap in cfmap.iteritems():
-                cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, make_deletions=True)
+                cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, ttl, make_deletions=True)
                 muts = []
                 for c in cols_or_supers_or_deletions:
                     if isinstance(c, SuperColumn):
@@ -209,7 +209,7 @@ class CassandraClient(object):
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
         
-    def _mk_cols_or_supers(self, mapping, timestamp, make_deletions=False):
+    def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
         if isinstance(mapping, list):
             return mapping
         colsorsupers = []
@@ -219,7 +219,7 @@ class CassandraClient(object):
                 for name in mapping:
                     cols = []
                     for col,val in mapping[name].iteritems():
-                        cols.append(Column(col, val, timestamp))
+                        cols.append(Column(col, val, timestamp, ttl))
                     colsorsupers.append(SuperColumn(name=name, columns=cols))
             else:
                 cols2delete = []
@@ -227,7 +227,7 @@ class CassandraClient(object):
                     if val is None and make_deletions:
                         cols2delete.append(col)
                     else:
-                        colsorsupers.append(Column(col, val, timestamp))
+                        colsorsupers.append(Column(col, val, timestamp, ttl))
                 if cols2delete:
                     colsorsupers.append(Deletion(timestamp, None, SlicePredicate(column_names=cols2delete)))
         else:
