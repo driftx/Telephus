@@ -9,15 +9,22 @@ from itertools import izip, chain
 from twisted.application import service
 from twisted.internet import defer, protocol
 from thrift import Thrift
-from telephus.cassandra import ttypes
+from thrift.transport import TTwisted
+from thrift.protocol import TBinaryProtocol
+from telephus.protocol import (ManagedThriftRequest, APIMismatch, ClientBusy,
+                               InvalidThriftRequest, match_thrift_version)
+from telephus.cassandra import Cassandra, constants
+from telephus.cassandra.ttypes import *
 
 noop = lambda *a, **kw: None
 
-class CassandraPoolParticipantClient(protocol.Protocol):
+class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     last_error = None
+    thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
-    def connectionMade(self):
-        self.blah
+    def __init__(self):
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client,
+                                               self.thriftFactory, None)
 
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
@@ -29,6 +36,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
+        self.pending_request = None
 
     def buildProtocol(self, addr):
         if self.service is not None:
@@ -75,14 +83,73 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.connector.state == 'connecting'
 
     def retry(self):
+        """
+        Retry this factory's connection. It is assumed that a previous
+        connection was attempted and failed- either before or after a
+        successful connection.
+        """
+
         if self.connector is None:
             raise ValueError("No connector to retry")
         if self.service is None:
             return
         self.connector.connect()
 
-    def isActive(self):
-        return self.my_proto is not None
+    def prep_connection(self, creds, keyspace, check_ver=False):
+        """
+        Do login and set_keyspace tasks as necessary, and also check this
+        node's idea of the Cassandra ring. Expects that our connection is
+        alive.
+
+        Return a Deferred that will fire with the ring information, or be
+        errbacked if something goes wrong.
+        """
+
+        d = defer.succeed(0)
+        if check_ver:
+            d.addCallback(lambda _: self.my_describe_version())
+            def gotVersion(ver):
+                if not match_thrift_version(constants.VERSION, ver):
+                    raise APIMismatch('%s remote is not compatible with %s telephus'
+                                      % (ver, constants.VERSION))
+                return True
+            d.addCallback(gotVersion)
+        if creds is not None:
+            d.addCallback(lambda _: self.my_login(creds))
+        if keyspace is not None:
+            d.addCallback(lambda _: self.my_set_keyspace(keyspace))
+        d.addCallback(lambda _: self.my_describe_ring(keyspace))
+        return d
+
+    def my_login(self, creds):
+        return self.execute(
+            ManagedThriftRequest('login', AuthenticationRequest(credentials=creds))
+        )
+
+    def my_set_keyspace(self, keyspace):
+        return self.execute(
+            ManagedThriftRequest('set_keyspace', keyspace)
+        )
+
+    def my_describe_ring(self, keyspace):
+        return self.execute(
+            ManagedThriftRequest('describe_ring', keyspace)
+        )
+
+    def request_finished(self, x):
+        self.pending_request = None
+        return x
+
+    def execute(self, req):
+        if self.pending_request is not None:
+            raise ClientBusy('rejecting %s request' % req.method)
+        method = self.my_proto.client.get(req.method)
+        if method is None:
+            raise InvalidThriftRequest("don't understand %s request" % req.method)
+        d = defer.maybeDeferred(method, *req.args)
+        self.pending_request = d
+        d.addBoth(self.request_finished)
+        return d
 
 class CassandraNode:
     """
@@ -186,7 +253,7 @@ class CassandraClusterPool(service.Service):
     default_cassandra_thrift_port = 9160
 
     retryables = (IOError, socket.error, Thrift.TException,
-                  ttypes.TimedOutException, ttypes.UnavailableException)
+                  TimedOutException, UnavailableException)
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
@@ -431,12 +498,15 @@ class CassandraClusterPool(service.Service):
         need = self.target_pool_size - self.num_connectors()
         if need <= 0:
             return
-        for n, c in izip(xrange(need), self.choose_nodes_to_connect()):
-            f = CassandraPoolReconnectorFactory(c, self)
-            self.reactor.connectTCP(c.host, c.port, f,
-                                    timeout=self.conn_timeout,
-                                    bindAddress=self.bind_address)
-            self.connectors.append(f)
+        for num, node in izip(xrange(need), self.choose_nodes_to_connect()):
+            self.make_conn(node)
+
+    def make_conn(self, node):
+        f = CassandraPoolReconnectorFactory(node, self)
+        self.reactor.connectTCP(node.host, node.port, f,
+                                timeout=self.conn_timeout,
+                                bindAddress=self.bind_address)
+        self.connectors.append(f)
 
     def remove_good_conn(self, f):
         try:
@@ -464,9 +534,15 @@ class CassandraClusterPool(service.Service):
 
     def client_conn_made(self, f, proto):
         proto.pool = self
+        d = f.prep_connection(self.creds, self.keyspace)
+        d.addCallback(self.client_ready, f)
+        d.addErrback(lambda fail: self.client_conn_failed(f, fail))
+
+    def client_ready(self, prep, f):
         f.node.conn_success()
         self.good_conns.append(f)
         self.log('Added connection to %s to the pool' % (f.node,))
+        # give it a pending request?
 
     def client_conn_lost(self, f, proto, reason):
         self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,),
@@ -479,3 +555,12 @@ class CassandraClusterPool(service.Service):
             f.node.conn_fail(reason)
             self.remove_connector(f)
             self.fill_pool()
+
+    def pushRequest(self, req, retries=None):
+        pass
+
+    def set_keyspace(self, keyspace):
+        pass
+
+    def login(self, credentials):
+        pass
