@@ -188,11 +188,18 @@ class CassandraClusterPool(service.Service):
     retryables = (IOError, socket.error, Thrift.TException,
                   ttypes.TimedOutException, ttypes.UnavailableException)
 
-    def __init__(self, seed_list, thrift_port=None, pool_size=None,
-                 conn_timeout=10, bind_address=None, log_cb=noop,
-                 reactor=None):
+    def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
+                 pool_size=None, conn_timeout=10, bind_address=None,
+                 log_cb=noop, reactor=None):
         """
         Initialize a CassandraClusterPool.
+
+        @param keyspace: If given and not None, determines the keyspace to
+            which all connections in this pool will be made.
+
+        @param creds: Credentials to use to authenticate Cassandra connections
+
+        @type creds: A dict (or other mapping) of strings to strings
 
         @param seed_list: An initial set of host addresses which, if
             connectable, are part of this cluster.
