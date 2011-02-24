@@ -19,7 +19,6 @@ from telephus.cassandra.ttypes import *
 noop = lambda *a, **kw: None
 
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
-    last_error = None
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
     def __init__(self):
@@ -30,6 +29,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
     connector = None
     my_proto = None
+    last_error = None
 
     def __init__(self, node, service):
         self.node = node
@@ -42,21 +42,21 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if self.service is not None:
             my_proto = protocol.ClientFactory.buildProtocol(self, addr)
             self.my_proto = my_proto
-            self.service.client_conn_made(self, my_proto)
+            self.service.client_conn_made(self)
             return my_proto
 
     def clientConnectionFailed(self, connector, reason):
         self.my_proto = None
         if self.service is not None:
             self.connector = connector
-            self.service.client_conn_failed(self, reason)
+            self.service.client_conn_failed(reason, self)
 
     def clientConnectionLost(self, connector, reason):
         p = self.my_proto
         self.my_proto = None
         if p is not None and self.service is not None:
             self.connector = connector
-            self.service.client_conn_lost(self, p, reason)
+            self.service.client_conn_lost(self, reason)
 
     def stopFactory(self):
         protocol.ClientFactory.stopFactory(self)
@@ -320,13 +320,13 @@ class CassandraClusterPool(service.Service):
         self.reactor = reactor
         self.connector = protocol.ClientCreator(reactor, CassandraPoolParticipantClient)
 
-        # A list of CassandraNode instances representing known nodes. This
+        # A set of CassandraNode instances representing known nodes. This
         # includes nodes from the initial seed list, nodes seen in
         # describe_ring calls to existing nodes, and nodes explicitly added
-        # by the addNode() method. Nodes are only removed from this list if
+        # by the addNode() method. Nodes are only removed from this set if
         # no connections have been successful in self.forget_node_interval
         # seconds, or by an explicit call to removeNode().
-        self.nodes = []
+        self.nodes = set()
 
         # A list of CassandraPoolReconnectorFactory instances corresponding to
         # connections which are either live or pending. Failed attempts to
@@ -366,9 +366,9 @@ class CassandraClusterPool(service.Service):
             node = CassandraNode(*node)
         if node in self.nodes:
             raise ValueError("%s is already known" % (node,))
-        self.nodes.append(node)
+        self.nodes.add(node)
 
-    def removeNode(self, host, port):
+    def removeNode(self, node):
         if not isinstance(node, CassandraNode):
             node = CassandraNode(*node)
         for f in self.all_connectors_to(node):
@@ -376,7 +376,7 @@ class CassandraClusterPool(service.Service):
         for f in self.dying_conns[:]:
             if f.node == node:
                 self.remove_connector(f)
-        self.nodes = [n for n in self.nodes if n != node]
+        self.nodes.remove(n)
 
     def err(self, _stuff=None, _why=None, **kw):
         if _stuff is None:
@@ -455,6 +455,11 @@ class CassandraClusterPool(service.Service):
         self.kill_excess_conns()
         self.fill_pool()
 
+    def update_known_nodes(self, ring):
+        for tokenrange in ring:
+            for addr in tokenrange.endpoints:
+                self.nodes.add(CassandraNode(addr, self.thrift_port))
+
     def choose_nodes_to_connect(self):
         while True:
             yield max(self.nodes, key=self.add_connection_score)
@@ -502,6 +507,7 @@ class CassandraClusterPool(service.Service):
             self.make_conn(node)
 
     def make_conn(self, node):
+        self.log('Adding connection to %s' % (node,))
         f = CassandraPoolReconnectorFactory(node, self)
         self.reactor.connectTCP(node.host, node.port, f,
                                 timeout=self.conn_timeout,
@@ -525,29 +531,30 @@ class CassandraClusterPool(service.Service):
             except ValueError:
                 pass
 
-    def client_conn_failed(self, f, reason):
+    def client_conn_failed(self, reason, f):
         self.err(reason, 'Thrift pool connection to %s failed' % (f.node,),
                  level=30)
         f.node.conn_fail(reason)
         self.remove_connector(f)
         self.fill_pool()
 
-    def client_conn_made(self, f, proto):
-        proto.pool = self
+    def client_conn_made(self, f):
+        f.my_proto.pool = self
         d = f.prep_connection(self.creds, self.keyspace)
         d.addCallback(self.client_ready, f)
-        d.addErrback(lambda fail: self.client_conn_failed(f, fail))
+        d.addErrback(self.client_conn_failed, f)
 
-    def client_ready(self, prep, f):
+    def client_ready(self, ring, f):
+        self.update_known_nodes(ring)
         f.node.conn_success()
         self.good_conns.append(f)
-        self.log('Added connection to %s to the pool' % (f.node,))
+        self.log('Successfully added connection to %s to the pool' % (f.node,))
         # give it a pending request?
 
-    def client_conn_lost(self, f, proto, reason):
+    def client_conn_lost(self, f, reason):
         self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,),
                  level=30)
-        if proto.last_error.check(*self.retryables):
+        if f.last_error is not None and f.last_error.check(*self.retryables):
             self.log('Retrying right away')
             self.remove_good_conn(f)
             f.retry()
