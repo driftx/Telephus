@@ -414,7 +414,6 @@ class CassandraClusterPool(service.Service):
             connections or setting timers.
         """
 
-        service.Service.__init__(self)
         self.seed_list = list(seed_list)
         if thrift_port is None:
             thrift_port = self.default_cassandra_thrift_port
@@ -451,7 +450,7 @@ class CassandraClusterPool(service.Service):
         # present a good snapshot of what is alive, now, and what is not.
         # This is stored in a deque so that it can be efficiently rotated
         # to distribute requests.
-        self.good_conns = collections.deque()
+        self.good_conns = set()
 
         # A set of CassandraPoolReconnectorFactory instances, formerly in
         # self.connectors, the connections for which are draining. No new
@@ -469,7 +468,7 @@ class CassandraClusterPool(service.Service):
         for factory in self.connectors.copy():
             factory.stopFactory()
         self.connectors = set()
-        self.good_conns = collections.deque()
+        self.good_conns = set()
         self.dying_conns = set()
 
     def addNode(self, node):
@@ -521,7 +520,7 @@ class CassandraClusterPool(service.Service):
         return len(self.all_connectors_to(host))
 
     def all_active_conns(self):
-        return self.good_conns[:]
+        return self.good_conns.copy()
 
     def num_active_conns(self):
         return len(self.good_conns)
@@ -533,8 +532,7 @@ class CassandraClusterPool(service.Service):
         return len(self.all_active_conns_to(node))
 
     def all_pending_conns(self):
-        good_conn_set = set(self.good_conns)
-        return [f for f in self.connectors if f.my_proto not in good_conn_set]
+        return self.connectors - self.good_conns
 
     def num_pending_conns(self):
         return len(self.all_pending_conns())
