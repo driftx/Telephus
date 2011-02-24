@@ -175,6 +175,31 @@ class CassandraClientTest(unittest.TestCase):
         res = yield self.client.get_indexed_slices(IDX_CF, expressions, start_key='')
         self.assertEquals(res[0].columns[0].column.value,'two')
 
+    def sleep(self, secs):
+        d = defer.Deferred()
+        reactor.callLater(secs, d.callback, None)
+        return d
+
+    @defer.inlineCallbacks
+    def test_ttls(self):
+        yield self.client.insert('test_ttls', CF, 'testval', column=COLUMN, ttl=1)
+        res = yield self.client.get('test_ttls', CF, column=COLUMN)
+        self.assertEqual(res.column.value, 'testval')
+        yield self.sleep(2)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+
+        yield self.client.batch_insert('test_ttls', CF, {COLUMN:'testval'}, ttl=1)
+        res = yield self.client.get('test_ttls', CF, column=COLUMN)
+        self.assertEqual(res.column.value, 'testval')
+        yield self.sleep(2)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+
+        yield self.client.batch_mutate({'test_ttls': {CF: {COLUMN: 'testval'}}}, ttl=1)
+        res = yield self.client.get('test_ttls', CF, column=COLUMN)
+        self.assertEqual(res.column.value, 'testval')
+        yield self.sleep(2)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+
     @defer.inlineCallbacks
     def test_keyspace_manipulation(self):
         ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', replication_factor=1, cf_defs=[])
