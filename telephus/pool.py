@@ -31,6 +31,15 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     my_proto = None
     last_error = None
 
+    # store the keyspace this connection is set to. we will take thrift
+    # requests along with the keyspace in which they expect to be made, and
+    # change keyspaces if necessary. this is done this way to avoid having
+    # another layer of queueing for requests in this class (in addition to the
+    # queue in CassandraClusterPool), or special logic here to pass on
+    # set_keyspace calls from the service at the right time (so already-queued
+    # requests still get made in their right keyspaces).
+    keyspace = None
+
     def __init__(self, node, service):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
@@ -95,7 +104,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             return
         self.connector.connect()
 
-    def prep_connection(self, creds, keyspace, check_ver=False):
+    def prep_connection(self, creds=None, keyspace=None, check_ver=False):
         """
         Do login and set_keyspace tasks as necessary, and also check this
         node's idea of the Cassandra ring. Expects that our connection is
@@ -127,14 +136,14 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         )
 
     def my_set_keyspace(self, keyspace):
-        return self.execute(
-            ManagedThriftRequest('set_keyspace', keyspace)
-        )
+        def actually_set_keyspace(_):
+            self.keyspace = keyspace
+        d = self.execute(ManagedThriftRequest('set_keyspace', keyspace))
+        d.addCallback(actually_set_keyspace)
+        return d
 
     def my_describe_ring(self, keyspace):
-        return self.execute(
-            ManagedThriftRequest('describe_ring', keyspace)
-        )
+        return self.execute(ManagedThriftRequest('describe_ring', keyspace))
 
     def request_finished(self, x):
         self.pending_request = None
@@ -146,7 +155,14 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         method = self.my_proto.client.get(req.method)
         if method is None:
             raise InvalidThriftRequest("don't understand %s request" % req.method)
-        d = defer.maybeDeferred(method, *req.args)
+
+        d = defer.succeed(0)
+
+        # get keyspace from the req
+        keyspace = getattr(req, 'keyspace', None)
+        if keyspace is not None and keyspace != self.keyspace:
+            d.addCallback(lambda _: self.my_set_keyspace(keyspace))
+        d.addCallback(lambda _: method(*req.args))
         self.pending_request = d
         d.addBoth(self.request_finished)
         return d
@@ -568,7 +584,4 @@ class CassandraClusterPool(service.Service):
         pass
 
     def set_keyspace(self, keyspace):
-        pass
-
-    def login(self, credentials):
-        pass
+        self.keyspace = keyspace
