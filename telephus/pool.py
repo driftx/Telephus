@@ -328,11 +328,11 @@ class CassandraClusterPool(service.Service):
         # seconds, or by an explicit call to removeNode().
         self.nodes = set()
 
-        # A list of CassandraPoolReconnectorFactory instances corresponding to
+        # A set of CassandraPoolReconnectorFactory instances corresponding to
         # connections which are either live or pending. Failed attempts to
-        # connect will remove a connector from this list. When connections are
+        # connect will remove a connector from this set. When connections are
         # lost, an immediate reconnect will be attempted.
-        self.connectors = []
+        self.connectors = set()
 
         # A collection of objects from self.connectors corresponding to
         # existing, working (as far as we know) connections. This will be
@@ -342,12 +342,12 @@ class CassandraClusterPool(service.Service):
         # to distribute requests.
         self.good_conns = collections.deque()
 
-        # A list of CassandraPoolReconnectorFactory instances, formerly in
+        # A set of CassandraPoolReconnectorFactory instances, formerly in
         # self.connectors, the connections for which are draining. No new
         # requests should be fed to these instances; they are tracked only so
         # that they can be terminated more fully in case this service is shut
         # down before they finish.
-        self.dying_conns = []
+        self.dying_conns = set()
 
     def startService(self):
         service.Service.startService(self)
@@ -355,11 +355,12 @@ class CassandraClusterPool(service.Service):
 
     def stopService(self):
         service.Service.stopService(self)
-        for factory in self.connectors:
+        for factory in self.connectors.copy():
             factory.service = None
             factory.stopFactory()
-        self.connectors = []
+        self.connectors = set()
         self.good_conns = collections.deque()
+        self.dying_conns = set()
 
     def addNode(self, node):
         if not isinstance(node, CassandraNode):
@@ -373,7 +374,7 @@ class CassandraClusterPool(service.Service):
             node = CassandraNode(*node)
         for f in self.all_connectors_to(node):
             self.remove_connector(f)
-        for f in self.dying_conns[:]:
+        for f in self.dying_conns.copy():
             if f.node == node:
                 self.remove_connector(f)
         self.nodes.remove(n)
@@ -394,7 +395,7 @@ class CassandraClusterPool(service.Service):
     # methods for inspecting current connection state
 
     def all_connectors(self):
-        return self.connectors[:]
+        return self.connectors.copy()
 
     def num_connectors(self):
         """
@@ -497,7 +498,7 @@ class CassandraClusterPool(service.Service):
         for n, f in izip(xrange(need_to_kill), self.choose_conns_to_kill()):
             f.finish_and_die()
             self.remove_connector(f)
-            self.dying_conns.append(f)
+            self.dying_conns.add(f)
 
     def fill_pool(self):
         need = self.target_pool_size - self.num_connectors()
@@ -512,7 +513,7 @@ class CassandraClusterPool(service.Service):
         self.reactor.connectTCP(node.host, node.port, f,
                                 timeout=self.conn_timeout,
                                 bindAddress=self.bind_address)
-        self.connectors.append(f)
+        self.connectors.add(f)
 
     def remove_good_conn(self, f):
         try:
