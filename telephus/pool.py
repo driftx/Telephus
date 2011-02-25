@@ -640,7 +640,7 @@ class CassandraClusterPool(service.Service):
             return float('-Inf')
         return sys.maxint - numconns
 
-    def adjust_pool_size(self, newsize):
+    def adjustPoolSize(self, newsize):
         """
         Change the target pool size. If we have too many connections already,
         ask some to finish what they're doing and die (preferring to kill
