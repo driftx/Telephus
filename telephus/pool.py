@@ -513,8 +513,7 @@ class CassandraClusterPool(service.Service):
 
         @param log_cb: A callable which is expected to work like
             L{twisted.python.log.msg}. Will be used when certain connection
-            and disconnection events occur. The default is for these events
-            not to be logged at all.
+            and disconnection events occur. The default is log.msg.
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
