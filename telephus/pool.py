@@ -37,6 +37,15 @@ class NoNodesAvailable(Exception):
     of seconds before a node /will/ be available.
     """
 
+def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
+    msg = '(No candidate nodes to expand pool to target size %d from %d;' \
+          ' there are %d pending requests.' % (pooltarget, poolsize, pending_reqs)
+    if waittime is None:
+        msg += ')'
+    else:
+        msg += ' Expected candidate node available in %s seconds.)' % waittime
+    log.msg(msg)
+
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
@@ -386,6 +395,11 @@ class CassandraClusterPool(service.Service):
         callback, the service will wait until a node is expected to be
         available and then check again.
 
+    @type on_insufficient_nodes: callback taking three arguments: the current
+        size of the connection pool, the target size of the pool, and the
+        number of seconds before a candidate node will be available to try
+        connecting (or None, if no candidate is in sight).
+
     @ivar on_insufficient_conns: if set to a callback, this will be called
         when a request is made and all current connections are busy. The
         request will still be expected to go through, once another connection
@@ -404,7 +418,7 @@ class CassandraClusterPool(service.Service):
 
     default_cassandra_thrift_port = 9160
     max_connections_per_node = 25
-    on_insufficient_nodes = noop
+    on_insufficient_nodes = lame_log_insufficient_nodes
     on_insufficient_conns = noop
     request_retries = 0
 
@@ -696,8 +710,10 @@ class CassandraClusterPool(service.Service):
             for num, node in izip(xrange(need), self.choose_nodes_to_connect()):
                 self.make_conn(node)
         except NoNodesAvailable, e:
+            waittime = e.args[0]
             if self.on_insufficient_nodes:
-                self.on_insufficient_nodes()
+                self.on_insufficient_nodes(self.num_connectors(), self.target_pool_size,
+                                           waittime if waittime != float('Inf') else None)
             self.schedule_future_fill_pool(e.args[0])
 
     def schedule_future_fill_pool(self, seconds):
