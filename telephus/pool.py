@@ -18,6 +18,7 @@ from telephus.protocol import (ManagedThriftRequest, APIMismatch, ClientBusy,
                                InvalidThriftRequest, match_thrift_version)
 from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
+from telephus.client import CassandraClient
 
 noop = lambda *a, **kw: None
 
@@ -494,6 +495,7 @@ class CassandraClusterPool(service.Service):
         self.keyspace = keyspace
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
+        self._client_instance = CassandraClient(self)
 
         if reactor is None:
             from twisted.internet import reactor
@@ -822,3 +824,18 @@ class CassandraClusterPool(service.Service):
 
     def set_keyspace(self, keyspace):
         self.keyspace = keyspace
+
+    def __getattr__(self, name):
+        """
+        Make CassandraClusterPool act like its own CassandraClient when
+        the user wants to use it that way
+        """
+        return getattr(self._client_instance, name)
+
+    @property
+    def consistency(self):
+        return self._client_instance.consistency
+
+    @consistency.setter
+    def consistency(self, value):
+        self._client_instance.consistency = value
