@@ -404,10 +404,16 @@ class CassandraClusterPool(service.Service):
         when a request is made and all current connections are busy. The
         request will still be expected to go through, once another connection
         is available, but it may be helpful to know how often this is
-        happening and possibly expand the pool. TODO: implement this
+        happening and possibly expand the pool
+
+    @type on_insufficient_conns: callback taking two arguments: the current
+        size of the connection pool, and the number of requests which are
+        pending in the CassandraClusterPool queue
 
     @ivar request_retries: the default number of retries which will be
         performed for requests when the retry number is unspecified
+
+    @type request_retries: int
 
     @ivar retryables: A list of Exception types which, if they are raised in
         the course of a Cassandra Thrift operation, mean both that (a) the
@@ -620,6 +626,8 @@ class CassandraClusterPool(service.Service):
         get more.
         """
 
+        # TODO: this should ideally take node history into account
+
         conntime = node.seconds_until_connect_ok()
         if conntime > 0:
             return -conntime
@@ -785,9 +793,17 @@ class CassandraClusterPool(service.Service):
     def pushRequest(self, req, retries=None):
         retries = retries or self.request_retries
         req.keyspace = self.keyspace
-        d = defer.Deferred()
-        self.request_queue.put((req, d, retries))
-        return d
+        req_d = defer.Deferred()
+        self.pushRequest_really(req, req_d, retries)
+        return req_d
+
+    def pushRequest_really(self, req, req_d, retries):
+        if len(self.request_queue.waiting) == 0:
+            # no workers are immediately available
+            if self.on_insufficient_conns:
+                self.on_insufficient_conns(self.num_connectors(),
+                                           len(self.request_queue.pending) + 1)
+        self.request_queue.put((req, req_d, retries))
 
     def resubmit(self, req, req_d, retries):
         # if DeferredQueue had a simple way to push requests back to the front
