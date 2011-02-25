@@ -389,6 +389,8 @@ class CassandraClusterPool(service.Service):
     @ivar max_connections_per_node: do our best not not to exceed this many
         connections to a single Cassandra endpoint
 
+    @type max_connections_per_node: int
+
     @ivar on_insufficient_nodes: if set to a callback, this will be called
         in the event that there are no valid places to connect to expand
         the pool to its target size. Regardless of actions taken by this
@@ -806,9 +808,17 @@ class CassandraClusterPool(service.Service):
         self.request_queue.put((req, req_d, retries))
 
     def resubmit(self, req, req_d, retries):
-        # if DeferredQueue had a simple way to push requests back to the front
-        # of the line, we could do that here. but no biggie. Just push.
-        self.request_queue.put((req, req_d, retries))
+        """
+        Push this request to the front of the line, just to be a jerk.
+        """
+        self.pushRequest_really(req, req_d, retries)
+        try:
+            self.request_queue.pending.remove((req, req_d, retries))
+        except ValueError:
+            # it's already been scooped up
+            pass
+        else:
+            self.request_queue.pending.insert(0, (req, req_d, retries))
 
     def set_keyspace(self, keyspace):
         self.keyspace = keyspace
