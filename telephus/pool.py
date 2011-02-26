@@ -194,8 +194,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d.addCallback(lambda _: self.my_describe_version())
             def gotVersion(ver):
                 if not match_thrift_version(constants.VERSION, ver):
-                    raise APIMismatch('%s remote is not compatible with %s telephus'
-                                      % (ver, constants.VERSION))
+                    raise APIMismatch('%s: %s remote is not compatible with '
+                                      '%s telephus'
+                                      % (self.node, ver, constants.VERSION))
                 return True
             d.addCallback(gotVersion)
         if creds is not None:
@@ -228,6 +229,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             return ()
         d.addErrback(suppress_no_keyspaces_error)
         return d
+
+    def my_describe_version(self):
+        return self.execute(ManagedThriftRequest('describe_version'))
 
     def my_describe_keyspaces(self):
         return self.execute(ManagedThriftRequest('describe_keyspaces'))
@@ -497,7 +501,7 @@ class CassandraClusterPool(service.Service):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None):
+                 log_cb=log.msg, reactor=None, check_api_ver=False):
         """
         Initialize a CassandraClusterPool.
 
@@ -540,6 +544,11 @@ class CassandraClusterPool(service.Service):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
+
+        @param check_api_ver: Whether the thrift API version number should be
+            checked against the one Telephus understands upon originating any
+            connection. If the versions are not compatible, the connection to
+            that node will be aborted. Default: no
         """
 
         self.seed_list = list(seed_list)
@@ -555,6 +564,7 @@ class CassandraClusterPool(service.Service):
         self.keyspace = keyspace
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
+        self.check_api_ver = check_api_ver
         self._client_instance = CassandraClient(self)
 
         if reactor is None:
@@ -830,7 +840,7 @@ class CassandraClusterPool(service.Service):
         self.fill_pool()
 
     def client_conn_made(self, f):
-        d = f.prep_connection(self.creds, self.keyspace)
+        d = f.prep_connection(self.creds, self.keyspace, check_ver=self.check_api_ver)
         d.addCallback(self.client_ready, f)
         d.addErrback(self.client_conn_failed, f)
 
