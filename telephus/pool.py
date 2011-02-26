@@ -82,7 +82,7 @@ def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
     if waittime is None:
         msg += ')'
     else:
-        msg += ' Expected candidate node available in %s seconds.)' % waittime
+        msg += ' Expected candidate node retry in %.1f seconds.)' % waittime
     log.msg(msg)
 
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
@@ -101,6 +101,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     connector = None
     last_error = None
     keep_working = True
+    noisy = False
 
     # store the keyspace this connection is set to. we will take thrift
     # requests along with the keyspace in which they expect to be made, and
@@ -371,7 +372,7 @@ class CassandraNode:
     """
 
     history_interval = 86400
-    max_delay = 600
+    max_delay = 180
     initial_delay = 0.5
 
     # NIST backoff factors
@@ -492,9 +493,10 @@ class CassandraClusterPool(service.Service):
 
     default_cassandra_thrift_port = 9160
     max_connections_per_node = 25
-    on_insufficient_nodes = lame_log_insufficient_nodes
-    on_insufficient_conns = noop
+    on_insufficient_nodes = staticmethod(lame_log_insufficient_nodes)
+    on_insufficient_conns = staticmethod(noop)
     request_retries = 0
+    suppress_same_err_window = 2.0
 
     retryables = (IOError, socket.error, Thrift.TException,
                   TimedOutException, UnavailableException)
@@ -794,7 +796,9 @@ class CassandraClusterPool(service.Service):
         except NoNodesAvailable, e:
             waittime = e.args[0]
             if self.on_insufficient_nodes:
-                self.on_insufficient_nodes(self.num_connectors(), self.target_pool_size,
+                self.on_insufficient_nodes(self.num_active_conns(),
+                                           self.target_pool_size,
+                                           len(self.request_queue.pending),
                                            waittime if waittime != float('Inf') else None)
             self.schedule_future_fill_pool(e.args[0])
 
@@ -802,7 +806,7 @@ class CassandraClusterPool(service.Service):
         if seconds == float('Inf'):
             return
         future_fill = getattr(self, 'future_fill_pool', None)
-        if future_fill is None:
+        if future_fill is None or not future_fill.active():
             self.future_fill_pool = self.reactor.callLater(seconds, self.fill_pool)
         else:
             future_fill.reset(seconds)
@@ -810,9 +814,12 @@ class CassandraClusterPool(service.Service):
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
         f = CassandraPoolReconnectorFactory(node, self)
+        bindaddr=self.bind_address
+        if bindaddr is not None and isinstance(bindaddr, str):
+            bindaddr = (bindaddr, 0)
         self.reactor.connectTCP(node.host, node.port, f,
                                 timeout=self.conn_timeout,
-                                bindAddress=self.bind_address)
+                                bindAddress=bindaddr)
         self.connectors.add(f)
 
     def remove_good_conn(self, f):
@@ -833,11 +840,23 @@ class CassandraClusterPool(service.Service):
                 pass
 
     def client_conn_failed(self, reason, f):
-        self.err(reason, 'Thrift pool connection to %s failed' % (f.node,),
-                 level=30)
+        # these tend to come in clusters. if the same error was received for
+        # this same node in the last suppress_same_err_window seconds, don't
+        # log it, and don't bother pushing another fill_pool attempt.
+        log_it = True
+        try:
+            tstamp, last_err = f.node.history[-1]
+        except IndexError:
+            pass
+        else:
+            if type(last_err) is type(reason.value):
+                if (time() - tstamp) < self.suppress_same_err_window:
+                    log_it = False
         f.node.conn_fail(reason)
         self.remove_connector(f)
-        self.fill_pool()
+        if log_it:
+            self.err(reason, 'Thrift pool connection to %s failed' % (f.node,))
+            self.fill_pool()
 
     def client_conn_made(self, f):
         d = f.prep_connection(self.creds, self.keyspace, check_ver=self.check_api_ver)
@@ -852,8 +871,7 @@ class CassandraClusterPool(service.Service):
         f.work_on_queue(self.request_queue)
 
     def client_conn_lost(self, f, reason):
-        self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,),
-                 level=30)
+        self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
         if f.last_error is not None and f.last_error.check(*self.retryables):
             self.log('Retrying right away')
             self.remove_good_conn(f)
