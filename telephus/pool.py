@@ -99,7 +99,6 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
     connector = None
-    my_proto = None
     last_error = None
     keep_working = True
 
@@ -255,7 +254,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.keyspace = ksname
         return val
 
-    def execute(self, req):
+    def execute(self, req, keyspace=None):
         method = getattr(self.my_proto.client, req.method, None)
         if method is None:
             raise InvalidThriftRequest("don't understand %s request" % req.method)
@@ -267,20 +266,18 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d.addCallback(lambda _: method(newksname))
             d.addCallback(self.store_successful_keyspace_set, newksname)
         else:
-            # get keyspace from the req
-            keyspace = getattr(req, 'keyspace', None)
             if keyspace is not None and keyspace != self.keyspace:
                 d.addCallback(lambda _: self.my_set_keyspace(keyspace))
             d.addCallback(lambda _: method(*req.args))
         return d
 
-    def process_request_result(self, result, req, req_d, retries):
+    def process_request_result(self, result, req, keyspace, req_d, retries):
         self.pending_request = None
         if isinstance(result, failure.Failure):
             self.last_error = result
             if retries > 0 and self.service is not None:
                 if result.check(*self.service.retryables):
-                    self.service.resubmit(req, req_d, retries - 1)
+                    self.service.resubmit(req, keyspace, req_d, retries - 1)
                     return
             req_d.errback(result)
         else:
@@ -288,12 +285,12 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def work_on_request(self, reqtuple):
         self.queue_getter = None
-        req, req_d, retries = reqtuple
+        req, keyspace, req_d, retries = reqtuple
         if self.pending_request is not None:
             raise ClientBusy('rejecting %s request' % req.method)
         self.pending_request = req
-        d = self.execute(req)
-        d.addBoth(self.process_request_result, req, req_d, retries)
+        d = self.execute(req, keyspace)
+        d.addBoth(self.process_request_result, req, keyspace, req_d, retries)
         return d
 
     def maybe_do_more_work(self, _, q):
@@ -423,7 +420,7 @@ class CassandraClusterPool(service.Service):
     L{twisted.service.application.Application} instance), set that to be this
     service's parent:
 
-        >>> cluster.pool.setServiceParent(application)
+        >>> cluster_pool.setServiceParent(application)
 
     and the startService() and stopService() methods will be called when
     appropriate.
@@ -812,7 +809,6 @@ class CassandraClusterPool(service.Service):
         self.fill_pool()
 
     def client_conn_made(self, f):
-        f.my_proto.pool = self
         d = f.prep_connection(self.creds, self.keyspace)
         d.addCallback(self.client_ready, f)
         d.addErrback(self.client_conn_failed, f)
@@ -836,33 +832,34 @@ class CassandraClusterPool(service.Service):
             self.remove_connector(f)
             self.fill_pool()
 
-    def pushRequest(self, req, retries=None):
+    def pushRequest(self, req, retries=None, keyspace=None):
+        if keyspace is None:
+            keyspace = self.keyspace
         retries = retries or self.request_retries
-        req.keyspace = self.keyspace
         req_d = defer.Deferred()
-        self.pushRequest_really(req, req_d, retries)
+        self.pushRequest_really(req, keyspace, req_d, retries)
         return req_d
 
-    def pushRequest_really(self, req, req_d, retries):
+    def pushRequest_really(self, req, keyspace, req_d, retries):
         if len(self.request_queue.waiting) == 0:
             # no workers are immediately available
             if self.on_insufficient_conns:
                 self.on_insufficient_conns(self.num_connectors(),
                                            len(self.request_queue.pending) + 1)
-        self.request_queue.put((req, req_d, retries))
+        self.request_queue.put((req, keyspace, req_d, retries))
 
-    def resubmit(self, req, req_d, retries):
+    def resubmit(self, req, keyspace, req_d, retries):
         """
         Push this request to the front of the line, just to be a jerk.
         """
-        self.pushRequest_really(req, req_d, retries)
+        self.pushRequest_really(req, keyspace, req_d, retries)
         try:
-            self.request_queue.pending.remove((req, req_d, retries))
+            self.request_queue.pending.remove((req, keyspace, req_d, retries))
         except ValueError:
             # it's already been scooped up
             pass
         else:
-            self.request_queue.pending.insert(0, (req, req_d, retries))
+            self.request_queue.pending.insert(0, (req, keyspace, req_d, retries))
 
     def set_keyspace(self, keyspace):
         oldkeyspace = self.keyspace
