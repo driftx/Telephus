@@ -216,11 +216,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         )
 
     def my_set_keyspace(self, keyspace):
-        def store_keyspace(_):
-            self.keyspace = keyspace
-        d = self.execute(ManagedThriftRequest('set_keyspace', keyspace))
-        d.addCallback(store_keyspace)
-        return d
+        return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def my_describe_ring(self, keyspace=None):
         if keyspace is None or keyspace == 'system':
@@ -228,10 +224,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             d = defer.succeed(keyspace)
         d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
-        def dummy(f):
+        def suppress_no_keyspaces_error(f):
             f.trap(NoKeyspacesAvailable)
             return ()
-        d.addErrback(dummy)
+        d.addErrback(suppress_no_keyspaces_error)
         return d
 
     def my_describe_keyspaces(self):
@@ -255,6 +251,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         d.addCallback(pick_non_system)
         return d
 
+    def store_successful_keyspace_set(self, val, ksname):
+        self.keyspace = ksname
+        return val
+
     def execute(self, req):
         method = getattr(self.my_proto.client, req.method, None)
         if method is None:
@@ -262,11 +262,16 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
         d = defer.succeed(0)
 
-        # get keyspace from the req
-        keyspace = getattr(req, 'keyspace', None)
-        if keyspace is not None and keyspace != self.keyspace:
-            d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-        d.addCallback(lambda _: method(*req.args))
+        if req.method == 'set_keyspace':
+            newksname = req.args[0]
+            d.addCallback(lambda _: method(newksname))
+            d.addCallback(self.store_successful_keyspace_set, newksname)
+        else:
+            # get keyspace from the req
+            keyspace = getattr(req, 'keyspace', None)
+            if keyspace is not None and keyspace != self.keyspace:
+                d.addCallback(lambda _: self.my_set_keyspace(keyspace))
+            d.addCallback(lambda _: method(*req.args))
         return d
 
     def process_request_result(self, result, req, req_d, retries):
@@ -860,7 +865,17 @@ class CassandraClusterPool(service.Service):
             self.request_queue.pending.insert(0, (req, req_d, retries))
 
     def set_keyspace(self, keyspace):
-        self.keyspace = keyspace
+        oldkeyspace = self.keyspace
+        # push a real set_keyspace on some (any) connection; the idea is that
+        # if it succeeds there, it is likely to succeed everywhere, and vice
+        # versa.  don't bother waiting for all connections to change- some of
+        # them may be doing long blocking tasks and by the time they're done,
+        # the keyspace might be changed again anyway
+        d = self.pushRequest(ManagedThriftRequest('set_keyspace', keyspace))
+        def store_keyspace(_):
+            self.keyspace = keyspace
+        d.addCallback(store_keyspace)
+        return d
 
     def __getattr__(self, name):
         """
