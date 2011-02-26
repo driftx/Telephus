@@ -328,6 +328,27 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if self.pending_request is None:
             self.stopFactory()
 
+class CassandraKeyspaceConnection:
+    """
+    Glue class which acts as a manager for CassandraClient but passes requests
+    on to a CassandraClusterPool- in the case where you want all requests
+    through this manager to be guaranteed to go to the same keyspace,
+    regardless of what other consumers of the CassandraClusterPool might do.
+    """
+
+    def __init__(self, pool, keyspace):
+        self.pool = pool
+        self.keyspace = keyspace
+
+    def pushRequest(self, req, retries=None):
+        return self.pool.pushRequest(req, retries=retries, keyspace=self.keyspace)
+
+    def set_keyspace(self, keyspace):
+        raise RuntimeError("Don't call set_keyspace on a CassandraKeyspaceConnection")
+
+    def login(self, credentials):
+        return self.pool.login(credentials)
+
 class CassandraNode:
     """
     Represent a Cassandra node, in the same sense Cassandra uses.
@@ -862,13 +883,30 @@ class CassandraClusterPool(service.Service):
             self.request_queue.pending.insert(0, (req, keyspace, req_d, retries))
 
     def set_keyspace(self, keyspace):
-        oldkeyspace = self.keyspace
+        """
+        Change the keyspace which will be used for subsequent requests to this
+        CassandraClusterPool, and return a Deferred that will fire once it can
+        be verified that connections can successfully use that keyspace.
+
+        If something goes wrong trying to change a connection to that keyspace,
+        the Deferred will errback, and the keyspace to be used for future
+        requests will not be changed.
+
+        Requests made between the time this method is called and the time that
+        the returned Deferred is fired may be made in either the previous
+        keyspace or the new keyspace. If you may need to make use of multiple
+        keyspaces at the same time in the same app, consider using the
+        specialized CassandraKeyspaceConnection interface provided by the
+        keyspaceConnection method.
+        """
+
         # push a real set_keyspace on some (any) connection; the idea is that
         # if it succeeds there, it is likely to succeed everywhere, and vice
         # versa.  don't bother waiting for all connections to change- some of
         # them may be doing long blocking tasks and by the time they're done,
         # the keyspace might be changed again anyway
         d = self.pushRequest(ManagedThriftRequest('set_keyspace', keyspace))
+
         def store_keyspace(_):
             self.keyspace = keyspace
         d.addCallback(store_keyspace)
@@ -888,3 +926,13 @@ class CassandraClusterPool(service.Service):
     @consistency.setter
     def consistency(self, value):
         self._client_instance.consistency = value
+
+    def keyspaceConnection(self, keyspace, consistency=ttypes.ConsistencyLevel.ONE):
+        """
+        Return a CassandraClient instance which uses this CassandraClusterPool
+        by way of a CassandraKeyspaceConnection, so that all requests made
+        through it are guaranteed to go to the given keyspace, no matter what
+        other consumers of this pool may do.
+        """
+        return CassandraClient(self, CassandraKeyspaceConnection(self, keyspace),
+                               consistency=consistency)
