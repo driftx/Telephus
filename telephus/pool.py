@@ -937,12 +937,12 @@ class CassandraClusterPool(service.Service):
     def consistency(self, value):
         self._client_instance.consistency = value
 
-    def keyspaceConnection(self, keyspace, consistency=ttypes.ConsistencyLevel.ONE):
+    def keyspaceConnection(self, keyspace, consistency=ConsistencyLevel.ONE):
         """
         Return a CassandraClient instance which uses this CassandraClusterPool
         by way of a CassandraKeyspaceConnection, so that all requests made
         through it are guaranteed to go to the given keyspace, no matter what
         other consumers of this pool may do.
         """
-        return CassandraClient(self, CassandraKeyspaceConnection(self, keyspace),
+        return CassandraClient(CassandraKeyspaceConnection(self, keyspace),
                                consistency=consistency)
