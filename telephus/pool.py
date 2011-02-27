@@ -497,6 +497,7 @@ class CassandraClusterPool(service.Service):
     on_insufficient_conns = staticmethod(noop)
     request_retries = 0
     suppress_same_err_window = 2.0
+    conn_factory = CassandraPoolReconnectorFactory
 
     retryables = (IOError, socket.error, Thrift.TException,
                   TimedOutException, UnavailableException)
@@ -813,7 +814,7 @@ class CassandraClusterPool(service.Service):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = CassandraPoolReconnectorFactory(node, self)
+        f = self.conn_factory(node, self)
         bindaddr=self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
