@@ -734,7 +734,12 @@ class CassandraClusterPool(service.Service):
     def update_known_nodes(self, ring):
         for tokenrange in ring:
             for addr in tokenrange.endpoints:
-                node = CassandraNode(addr, self.thrift_port)
+                if ':' in addr:
+                    addr, port = addr.split(':', 1)
+                    port = int(port)
+                else:
+                    port = self.thrift_port
+                node = CassandraNode(addr, port)
                 if node not in self.nodes:
                     self.addNode(node)
 
