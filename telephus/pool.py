@@ -606,7 +606,10 @@ class CassandraClusterPool(service.Service):
     def startService(self):
         service.Service.startService(self)
         for addr in self.seed_list:
-            self.addNode((addr, self.thrift_port))
+            if isinstance(addr, tuple) and len(addr) == 2:
+                self.addNode(addr)
+            else:
+                self.addNode((addr, self.thrift_port))
         self.fill_pool()
 
     def stopService(self):
