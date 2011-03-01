@@ -100,7 +100,6 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
     connector = None
     last_error = None
-    keep_working = True
     noisy = False
 
     # store the keyspace this connection is set to. we will take thrift
@@ -117,19 +116,20 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
-        self.pending_request = None
-
-    def buildProtocol(self, addr):
-        if self.service is not None:
-            my_proto = protocol.ClientFactory.buildProtocol(self, addr)
-            self.my_proto = my_proto
-            return my_proto
+        self.job = self.jobphase = None
 
     def clientConnectionMade(self, proto):
-        if self.service is not None:
+        assert self.my_proto is None
+        assert self.jobphase is None
+        if self.service is None:
+            proto.transport.loseConnection()
+        else:
+            self.my_proto = proto
             self.service.client_conn_made(self)
 
     def clientConnectionFailed(self, connector, reason):
+        assert self.my_proto is None
+        assert self.jobphase is None
         self.my_proto = None
         if self.service is not None:
             self.connector = connector
@@ -138,6 +138,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     def clientConnectionLost(self, connector, reason):
         p = self.my_proto
         self.my_proto = None
+        self.stop_working_on_queue()
         if p is not None and self.service is not None:
             self.connector = connector
             self.service.client_conn_lost(self, reason)
@@ -154,6 +155,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.connector = None
         p = self.my_proto
         self.my_proto = None
+        self.stop_working_on_queue()
         if p is not None and p.transport is not None:
             p.transport.loseConnection()
 
@@ -276,26 +278,33 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d.addCallback(lambda _: method(*req.args))
         return d
 
-    def process_request_result(self, result, req, keyspace, req_d, retries):
-        self.pending_request = None
-        if isinstance(result, failure.Failure):
-            self.last_error = result
-            if retries > 0 and self.service is not None:
-                if result.check(*self.service.retryables):
-                    self.service.resubmit(req, keyspace, req_d, retries - 1)
-                    return
-            req_d.errback(result)
+    def job(self, _name, _func, *args, **kw):
+        d = defer.maybeDeferred(_func, *args, **kw)
+        if self.jobphase is not None:
+            raise ClientBusy('Tried to start job phase %s while in %s'
+                             % (_name, self.jobphase))
+        self.jobphase = _name
+        self.job_d = d
+        def clear_it(x):
+            self.jobphase = None
+            self.job_d = None
+            return x
+        d.addBoth(clear_it)
+        return d
+
+    def process_request_error(self, err, req, keyspace, req_d, retries):
+        self.last_error = err
+        if retries > 0 and self.service is not None \
+        and err.check(*self.service.retryables):
+            self.service.resubmit(req, keyspace, req_d, retries - 1)
         else:
-            req_d.callback(result)
+            req_d.errback(err)
 
     def work_on_request(self, reqtuple):
-        self.queue_getter = None
         req, keyspace, req_d, retries = reqtuple
-        if self.pending_request is not None:
-            raise ClientBusy('rejecting %s request' % req.method)
-        self.pending_request = req
-        d = self.execute(req, keyspace)
-        d.addBoth(self.process_request_result, req, keyspace, req_d, retries)
+        d = self.job('pending_request', self.execute, req, keyspace)
+        d.addCallback(req_d.callback)
+        d.addErrback(self.process_request_error, req, keyspace, req_d, retries)
         return d
 
     def maybe_do_more_work(self, _, q):
@@ -314,12 +323,18 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         # don't process more requests
 
     def work_on_queue(self, q):
-        self.queue_getter = d = q.get()
+        self.keep_working = True
+        d = self.job('queue_getter', q.get)
         d.addCallback(self.work_on_request)
         d.addCallback(self.maybe_do_more_work, q)
         d.addErrback(lambda f: f.trap(defer.CancelledError))
         d.addErrback(self.scream_like_a_little_girl)
         return d
+
+    def stop_working_on_queue(self):
+        self.keep_working = False
+        if self.jobphase == 'queue_getter':
+            self.job_d.cancel()
 
     def finish_and_die(self):
         """
@@ -327,10 +342,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         disconnect and die. If not, cancel any pending queue requests and
         just die.
         """
-        self.keep_working = False
-        if self.queue_getter is not None:
-            self.queue_getter.cancel()
-        if self.pending_request is None:
+        self.stop_working_on_queue()
+        if self.jobphase != 'pending_request':
             self.stopFactory()
 
 class CassandraKeyspaceConnection:
