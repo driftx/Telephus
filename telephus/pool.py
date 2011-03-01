@@ -262,6 +262,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return val
 
     def execute(self, req, keyspace=None):
+        if self.my_proto is None:
+            return defer.errback(error.ConnectionClosed(
+                                    'Lost connection before %s request could be made'
+                                    % (req.method,)))
         method = getattr(self.my_proto.client, req.method, None)
         if method is None:
             raise InvalidThriftRequest("don't understand %s request" % req.method)
