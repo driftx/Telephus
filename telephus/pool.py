@@ -317,7 +317,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.queue_getter = d = q.get()
         d.addCallback(self.work_on_request)
         d.addCallback(self.maybe_do_more_work, q)
-        d.addErrback(lambda f: f.trap(error.CancelledError))
+        d.addErrback(lambda f: f.trap(defer.CancelledError))
         d.addErrback(self.scream_like_a_little_girl)
         return d
 
