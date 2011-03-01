@@ -115,6 +115,18 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def test_keyspace_connection(self):
         pass
 
+    def test_conn_loss_during_idle(self):
+        pass
+
+    def test_conn_loss_during_request(self):
+        pass
+
+    def test_last_conn_loss_during_idle(self):
+        pass
+
+    def test_last_conn_loss_during_request(self):
+        pass
+
 class StringQueueProtocol(basic.Int16StringReceiver):
     def __init__(self):
         self.recvq = defer.DeferredQueue()
