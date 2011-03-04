@@ -927,6 +927,7 @@ class CassandraClusterPool(service.Service):
         """
         Push this request to the front of the line, just to be a jerk.
         """
+        self.log('resubmitting %s request' % (req.method,))
         self.pushRequest_really(req, keyspace, req_d, retries)
         try:
             self.request_queue.pending.remove((req, keyspace, req_d, retries))
