@@ -116,7 +116,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
-        self.job = self.jobphase = None
+        self.job_d = self.jobphase = None
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
