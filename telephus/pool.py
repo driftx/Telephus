@@ -147,7 +147,6 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         # idempotent
         self.logstate('stopFactory')
         protocol.ClientFactory.stopFactory(self)
-        self.service = None
         if self.connector:
             try:
                 self.connector.stopConnecting()
@@ -305,8 +304,11 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.last_error = err
         if retries > 0 and self.service is not None \
         and err.check(*self.service.retryables):
+            self.logstate('-- resubmit --')
             self.service.resubmit(req, keyspace, req_d, retries - 1)
         else:
+            self.logstate('-- giving up [retries=%d service=%s err=%s] --'
+                          % (retries, self.service, err.value))
             req_d.errback(err)
 
     def work_on_request(self, reqtuple):
@@ -648,6 +650,7 @@ class CassandraClusterPool(service.Service):
     def stopService(self):
         service.Service.stopService(self)
         for factory in self.connectors.copy():
+            factory.service = None
             factory.stopFactory()
         self.connectors = set()
         self.good_conns = set()
