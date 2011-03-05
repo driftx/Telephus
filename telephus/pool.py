@@ -507,10 +507,11 @@ class CassandraClusterPool(service.Service):
         callback, the service will wait until a node is expected to be
         available and then check again.
 
-    @type on_insufficient_nodes: callback taking three arguments: the current
-        size of the connection pool, the target size of the pool, and the
-        number of seconds before a candidate node will be available to try
-        connecting (or None, if no candidate is in sight).
+    @type on_insufficient_nodes: callback taking four arguments: the current
+        size of the connection pool, the target size of the pool, the
+        number of pending requests, and the number of seconds before a
+        candidate node will be available to try connecting (or None, if no
+        candidate is in sight).
 
     @ivar on_insufficient_conns: if set to a callback, this will be called
         when a request is made and all current connections are busy. The
