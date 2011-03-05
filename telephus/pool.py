@@ -319,6 +319,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def work_on_request(self, reqtuple):
         req, keyspace, req_d, retries = reqtuple
+        if req_d.called:
+            # cancelled while pending in the queue
+            return
         d = self.job('pending_request', self.execute, req, keyspace)
         d.addCallback(req_d.callback)
         d.addErrback(self.process_request_error, req, keyspace, req_d, retries)
