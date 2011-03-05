@@ -898,7 +898,10 @@ class CassandraClusterPool(service.Service):
         f.work_on_queue(self.request_queue)
 
     def client_conn_lost(self, f, reason):
-        self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
+        if reason.check(error.ConnectionDone):
+            self.log('Thrift pool connection to %s failed (cleanly)' % (f.node,))
+        else:
+            self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
         if f.last_error is not None and f.last_error.check(*self.retryables):
             self.log('Retrying right away')
             self.remove_good_conn(f)
