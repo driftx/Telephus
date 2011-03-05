@@ -11,8 +11,10 @@ from telephus.cassandra.ttypes import *
 from Cassanova import cassanova
 
 def deferwait(s, result=None):
-    d = defer.Deferred()
-    reactor.callLater(s, d.callback, result)
+    def canceller(my_d):
+        dcall.cancel()
+    d = defer.Deferred(canceller=canceller)
+    dcall = reactor.callLater(s, d.callback, result)
     return d
 
 class CassandraClusterPoolTest(unittest.TestCase):
@@ -360,7 +362,12 @@ class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
                                 column_path, consistency_level)
         for arg in args:
             if arg.startswith('wait='):
-                d.addCallback(lambda a: deferwait(float(arg[5:]), a))
+                waittime = float(arg[5:])
+                def doWait(x):
+                    waiter = deferwait(waittime, x)
+                    self.service.waiters.append(waiter)
+                    return waiter
+                d.addCallback(doWait)
         return d
 
 class EnhancedCassanovaFactory(cassanova.CassanovaFactory):
@@ -382,6 +389,7 @@ class FakeCassandraCluster(cassanova.CassanovaService):
 
     def __init__(self, num_nodes, start_port=41356, interface='127.0.0.1'):
         cassanova.CassanovaService.__init__(self, start_port)
+        self.waiters = []
         self.iface = interface
         for n in range(num_nodes):
             self.add_node_on_port(start_port + n)
@@ -397,3 +405,9 @@ class FakeCassandraCluster(cassanova.CassanovaService):
         node = EnhancedCassanovaNode(port, self.iface, token=token)
         node.setServiceParent(self)
         self.ring[node.mytoken] = node
+
+    def stopService(self):
+        cassanova.CassanovaService.stopService(self)
+        for d in self.waiters:
+            if not d.called:
+                d.cancel()
