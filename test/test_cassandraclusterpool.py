@@ -21,6 +21,9 @@ class CassandraClusterPoolTest(unittest.TestCase):
     start_port = 44449
     ksname = 'TestKeyspace'
 
+    def assertFired(self, d):
+        self.assert_(d.called, msg='%s has not been fired' % (d,))
+
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True):
         cluster = FakeCassandraCluster(num_nodes, start_port=self.start_port)
@@ -315,6 +318,12 @@ class CassandraClusterPoolTest(unittest.TestCase):
                 if not succ:
                     answer.raiseException()
 
+    def test_zero_retries(self):
+        pass
+
+    def test_exhaust_retries(self):
+        pass
+
     def test_connection_leveling(self):
         pass
 
@@ -342,8 +351,35 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def test_last_conn_loss_during_idle(self):
         pass
 
+    @defer.inlineCallbacks
     def test_last_conn_loss_during_request(self):
-        pass
+        with self.cluster_and_pool(pool_size=1, num_nodes=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            conns = self.cluster.get_connections()
+            self.assertEqual(len(conns), 1)
+
+            d = self.pool.get('key004', 'Standard1/wait=1.0',
+                              '%s-004-008' % self.ksname, retries=4)
+            yield deferwait(0.1)
+
+            def cancel_if_no_conns(numconns, pending):
+                numworkers = self.pool.num_working_conns()
+                if numworkers == 0 and not d.called:
+                    d.cancel()
+            self.pool.on_insufficient_conns = cancel_if_no_conns
+
+            workers = self.cluster.get_working_connections()
+            self.assertEqual(len(workers), 1)
+            node, proto = workers[0]
+            node.stopService()
+            yield deferwait(0.05)
+
+            self.assertFired(d)
+            yield self.assertFailure(d, defer.CancelledError)
+
+        self.flushLoggedErrors()
 
 class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
     """
