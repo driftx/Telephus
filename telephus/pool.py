@@ -612,6 +612,7 @@ class CassandraClusterPool(service.Service):
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
         self.check_api_ver = check_api_ver
+        self.future_fill_pool = None
         self._client_instance = CassandraClient(self)
 
         if reactor is None:
@@ -658,6 +659,8 @@ class CassandraClusterPool(service.Service):
 
     def stopService(self):
         service.Service.stopService(self)
+        if self.future_fill_pool is not None and self.future_fill_pool.active():
+            self.future_fill_pool.cancel()
         for factory in self.connectors.copy():
             factory.service = None
             factory.stopFactory()
@@ -859,11 +862,10 @@ class CassandraClusterPool(service.Service):
     def schedule_future_fill_pool(self, seconds):
         if seconds == float('Inf'):
             return
-        future_fill = getattr(self, 'future_fill_pool', None)
-        if future_fill is None or not future_fill.active():
+        if self.future_fill_pool is None or not self.future_fill_pool.active():
             self.future_fill_pool = self.reactor.callLater(seconds, self.fill_pool)
         else:
-            future_fill.reset(seconds)
+            self.future_fill_pool.reset(seconds)
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
