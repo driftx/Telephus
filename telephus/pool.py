@@ -77,6 +77,9 @@ class NoNodesAvailable(Exception):
     Indicates there are nodes to which we are allowed to make another immediate
     connection. The argument to this exception should be the expected number
     of seconds before a node /will/ be available.
+
+    This should be handled internally; user code is not expected to see or
+    handle this type of exception.
     """
 
 def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
