@@ -271,11 +271,50 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
             node.startService()
 
-    def test_lower_pool_size(self):
-        pass
+    @defer.inlineCallbacks
+    def test_adjust_pool_size(self):
+        pool_size = 8
 
-    def test_raise_pool_size(self):
-        pass
+        with self.cluster_and_pool(pool_size=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            # wait for initial conn
+            yield deferwait(0.1)
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.2)
+
+            conns = self.cluster.get_connections()
+            self.assertEqual(len(conns), pool_size)
+            # one conn to each node
+            self.assertEqual(len(set(n for (n,p) in conns)), pool_size)
+
+            dlist = []
+            for x in range(pool_size):
+                d = self.pool.get('key001', 'Standard1/wait=0.5',
+                                  '%s-001-002' % self.ksname, retries=3)
+                d.addCallback(lambda c: c.column.value)
+                d.addCallback(self.assertEqual, 'val-%s-001-002' % self.ksname)
+                dlist.append(d)
+
+            conns = self.cluster.get_connections()
+            self.assertEqual(len(conns), pool_size)
+            # one conn to each node
+            self.assertEqual(len(set(n for (n,p) in conns)), pool_size)
+
+            # turn down pool size
+            self.pool.adjustPoolSize(pool_size - 2)
+            yield deferwait(0.1)
+
+            conns = self.cluster.get_connections()
+            self.assertEqual(len(conns), pool_size - 2)
+
+            result = yield defer.DeferredList(dlist, consumeErrors=True)
+            for succ, answer in result:
+                if not succ:
+                    answer.raiseException()
 
     def test_connection_leveling(self):
         pass
