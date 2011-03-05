@@ -728,6 +728,12 @@ class CassandraClusterPool(service.Service):
     def num_active_conns_to(self, node):
         return len(self.all_active_conns_to(node))
 
+    def all_working_conns(self):
+        return [f for f in self.good_conns if f.jobphase == 'pending_request']
+
+    def num_working_conns(self):
+        return len(self.all_working_conns())
+
     def all_pending_conns(self):
         return self.connectors - self.good_conns
 
