@@ -9,7 +9,6 @@ from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory
 from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
 from Cassanova import cassanova
-from twisted.python import log
 
 def deferwait(s, result=None):
     d = defer.Deferred()
@@ -233,7 +232,6 @@ class CassandraClusterPoolTest(unittest.TestCase):
             # allow reconnect
             yield deferwait(0.2)
             newconns = self.cluster.get_working_connections()
-            log.msg('newconns: %r' % (newconns,))
             self.assertEqual(len(newconns), 1)
             newnode, newproto = newconns[0]
             # we want the preference to be reconnecting the same node
@@ -261,7 +259,6 @@ class CassandraClusterPoolTest(unittest.TestCase):
             # allow reconnect
             yield deferwait(0.2)
             newconns = self.cluster.get_working_connections()
-            log.msg('newconns: %r' % (newconns,))
             self.assertEqual(len(newconns), 1)
             newnode, newproto = newconns[0]
             # we want the preference to be reconnecting the same node
