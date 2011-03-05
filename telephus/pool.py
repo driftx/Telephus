@@ -50,7 +50,7 @@ from twisted.application import service
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
 from thrift import Thrift
-from thrift.transport import TTwisted
+from thrift.transport import TTwisted, TTransport
 from thrift.protocol import TBinaryProtocol
 from telephus.protocol import (ManagedThriftRequest, APIMismatch, ClientBusy,
                                InvalidThriftRequest, match_thrift_version)
@@ -517,7 +517,8 @@ class CassandraClusterPool(service.Service):
     conn_factory = CassandraPoolReconnectorFactory
 
     retryables = (IOError, socket.error, Thrift.TException,
-                  TimedOutException, UnavailableException)
+                  TimedOutException, UnavailableException,
+                  TTransport.TTransportException)
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
