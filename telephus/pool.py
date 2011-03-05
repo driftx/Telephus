@@ -315,7 +315,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if not self.keep_working:
             self.stopFactory()
         elif self.service is not None:
-            self.service.reactor.callLater(0, self.work_on_queue, q)
+            self.work_on_queue(q)
 
     def scream_like_a_little_girl(self, fail):
         if self.service is not None:
