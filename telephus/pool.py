@@ -37,6 +37,9 @@ TODO:
     * take node error/connection history into account with add_connection_score
     * remove nodes that have been missing or unconnectable for too long
     * don't re-add manually removed nodes
+    * when seed node list is shofter than requested pool size, don't try to
+      fill the pool completely until after a seed node is contacted and an
+      initial live-node list collected
 
 """
 
