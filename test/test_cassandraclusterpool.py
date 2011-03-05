@@ -5,7 +5,7 @@ import contextlib
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
-                           CassandraPoolParticipantClient)
+                           CassandraPoolParticipantClient, TTransport)
 from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
 from Cassanova import cassanova
@@ -326,8 +326,26 @@ class CassandraClusterPoolTest(unittest.TestCase):
                 if not succ:
                     answer.raiseException()
 
+    @defer.inlineCallbacks
     def test_zero_retries(self):
-        pass
+        with self.cluster_and_pool():
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+            d = self.pool.get('key006', 'Standard1/wait=0.5',
+                              '%s-006-002' % self.ksname, retries=0)
+
+            yield deferwait(0.05)
+            conns = self.cluster.get_working_connections()
+            self.assertEqual(len(conns), 1)
+
+            # kill the connection handling the query- an immediate retry
+            # should work, if a retry is attempted
+            node, proto = conns[0]
+            proto.transport.loseConnection()
+
+            yield self.assertFailure(d, TTransport.TTransportException)
+
+        self.flushLoggedErrors()
 
     def test_exhaust_retries(self):
         pass
@@ -430,14 +448,16 @@ class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
             args = parts[1:]
         d = defer.maybeDeferred(cassanova.CassanovaInterface.get, self, key,
                                 column_path, consistency_level)
+        waittime = 0
         for arg in args:
             if arg.startswith('wait='):
-                waittime = float(arg[5:])
-                def doWait(x):
-                    waiter = deferwait(waittime, x)
-                    self.service.waiters.append(waiter)
-                    return waiter
-                d.addCallback(doWait)
+                waittime += float(arg[5:])
+        if waittime > 0:
+            def doWait(x):
+                waiter = deferwait(waittime, x)
+                self.service.waiters.append(waiter)
+                return waiter
+            d.addCallback(doWait)
         return d
 
 class EnhancedCassanovaFactory(cassanova.CassanovaFactory):
@@ -481,3 +501,4 @@ class FakeCassandraCluster(cassanova.CassanovaService):
         for d in self.waiters:
             if not d.called:
                 d.cancel()
+                d.addErrback(lambda n: None)
