@@ -17,6 +17,14 @@ def deferwait(s, result=None):
     dcall = reactor.callLater(s, d.callback, result)
     return d
 
+def addtimeout(d, waittime):
+    timeouter = reactor.callLater(waittime, d.cancel)
+    def canceltimeout(x):
+        if timeouter.active():
+            timeouter.cancel()
+        return x
+    d.addBoth(canceltimeout)
+
 class CassandraClusterPoolTest(unittest.TestCase):
     start_port = 44449
     ksname = 'TestKeyspace'
@@ -348,8 +356,34 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def test_conn_loss_during_request(self):
         pass
 
+    @defer.inlineCallbacks
     def test_last_conn_loss_during_idle(self):
-        pass
+        with self.cluster_and_pool(pool_size=1, num_nodes=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            no_nodes_called = [False]
+            def on_no_nodes(poolsize, targetsize, pendingreqs, expectedwait):
+                self.assertEqual(poolsize, 0)
+                self.assertEqual(targetsize, 1)
+                self.assertEqual(pendingreqs, 0)
+                no_nodes_called[0] = True
+            self.pool.on_insufficient_nodes = on_no_nodes
+
+            conns = self.cluster.get_connections()
+            self.assertEqual(len(conns), 1)
+            node, proto = conns[0]
+            node.stopService()
+            yield deferwait(0.05)
+
+            self.assert_(no_nodes_called[0])
+
+            node.startService()
+            d = self.pool.get('key004', 'Standard1', '%s-004-007' % self.ksname,
+                              retries=2)
+            addtimeout(d, 3.0)
+            answer = yield d
+            self.assertEqual(answer.column.value, 'val-%s-004-007' % self.ksname)
 
     @defer.inlineCallbacks
     def test_last_conn_loss_during_request(self):
