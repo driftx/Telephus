@@ -224,7 +224,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             # give the timed 'get' a chance to start
             yield deferwait(0.2)
 
-            # kill the backend handling the query
+            # kill the connection handling the query
             conns = self.cluster.get_working_connections()
             self.assertEqual(len(conns), 1)
             node, proto = conns[0]
@@ -242,7 +242,34 @@ class CassandraClusterPoolTest(unittest.TestCase):
             self.assertEqual(answer, 'val-%s-000-000' % self.ksname)
 
     def test_resubmit_to_new_conn(self):
-        pass
+        with self.cluster_and_pool():
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            d = self.pool.get('key005', 'Standard1/wait=1.0', '%s-005-000' % self.ksname,
+                              retries=3)
+
+            # give the timed 'get' a chance to start
+            yield deferwait(0.2)
+
+            # kill the backend handling the query
+            conns = self.cluster.get_working_connections()
+            self.assertEqual(len(conns), 1)
+            node, proto = conns[0]
+            node.stopService()
+
+            # allow reconnect
+            yield deferwait(0.2)
+            newconns = self.cluster.get_working_connections()
+            log.msg('newconns: %r' % (newconns,))
+            self.assertEqual(len(newconns), 1)
+            newnode, newproto = newconns[0]
+            # we want the preference to be reconnecting the same node
+            self.assertNotEqual(node, newnode)
+            answer = (yield d).column.value
+            self.assertEqual(answer, 'val-%s-005-000' % self.ksname)
+
+            node.startService()
 
     def test_lower_pool_size(self):
         pass
