@@ -444,6 +444,9 @@ class CassandraNode:
            and self.host == other.host \
            and self.port == other.port
 
+    def __cmp__(self, other):
+        return cmp((self.host, self.port), (other.host, other.port))
+
     def __hash__(self):
         return hash((self.__class__, self.host, self.port))
 
