@@ -680,9 +680,11 @@ class CassandraClusterPool(service.Service):
         if not isinstance(node, CassandraNode):
             node = CassandraNode(*node)
         for f in self.all_connectors_to(node):
+            f.stopFactory()
             self.remove_connector(f)
         for f in self.dying_conns.copy():
             if f.node == node:
+                f.stopFactory()
                 self.remove_connector(f)
         self.nodes.remove(n)
 
@@ -832,6 +834,7 @@ class CassandraClusterPool(service.Service):
         if killnum <= 0:
             return
         for n, f in izip(xrange(killnum), self.choose_pending_conns_to_kill()):
+            f.stopFactory()
             self.remove_connector(f)
 
     def kill_excess_conns(self):
@@ -892,7 +895,6 @@ class CassandraClusterPool(service.Service):
             pass
 
     def remove_connector(self, f):
-        f.stopFactory()
         self.remove_good_conn(f)
         try:
             self.connectors.remove(f)
@@ -916,6 +918,7 @@ class CassandraClusterPool(service.Service):
                 if (time() - tstamp) < self.suppress_same_err_window:
                     log_it = False
         f.node.conn_fail(reason)
+        f.stopFactory()
         self.remove_connector(f)
         if log_it:
             self.err(reason, 'Thrift pool connection to %s failed' % (f.node,))
@@ -944,6 +947,7 @@ class CassandraClusterPool(service.Service):
             f.retry()
         else:
             f.node.conn_fail(reason)
+            f.stopFactory()
             self.remove_connector(f)
             self.fill_pool()
 
