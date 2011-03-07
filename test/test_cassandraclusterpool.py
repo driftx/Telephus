@@ -406,8 +406,36 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.flushLoggedErrors()
 
+    @defer.inlineCallbacks
     def test_exhaust_retries(self):
-        pass
+        retries = 3
+        num_nodes = pool_size = retries + 2
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.2)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(pool_size)
+
+            d = self.pool.get('key002', 'Standard1/wait=0.5',
+                              '%s-002-003' % self.ksname, retries=retries)
+            yield deferwait(0.05)
+
+            for retry in range(retries + 1):
+                self.assertNumConnections(pool_size)
+                self.assertNumWorkers(1)
+                self.assertNotFired(d)
+                self.killWorkingNode()
+                yield deferwait(0.1)
+
+            yield self.assertFailure(d, TTransport.TTransportException)
+
+        self.flushLoggedErrors()
 
     def test_connection_leveling(self):
         pass
