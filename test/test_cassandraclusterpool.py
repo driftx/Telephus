@@ -437,6 +437,47 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.flushLoggedErrors()
 
+    @defer.inlineCallbacks
+    def test_kill_pending_conns(self):
+        num_nodes = pool_size = 8
+        fake_pending = 2
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.1)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(pool_size)
+
+            class fake_connector:
+                def __init__(self, nodename):
+                    self.node = nodename
+                    self.stopped = False
+
+                def stopFactory(self):
+                    self.stopped = True
+
+            fakes = [fake_connector('fake%02d' % n) for n in range(fake_pending)]
+            # by putting them in connectors but not good_conns, these will
+            # register as connection-pending
+            self.pool.connectors.update(fakes)
+
+            self.assertEqual(self.pool.num_pending_conns(), 2)
+            self.pool.adjustPoolSize(pool_size)
+
+            # the pending conns should have been killed first
+            self.assertEqual(self.pool.num_pending_conns(), 0)
+            self.assertEqual(self.pool.num_connectors(), pool_size)
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(pool_size)
+
+            for fk in fakes:
+                self.assert_(fk.stopped, msg='Fake %s was not stopped!' % fk.node)
+
     def test_connection_leveling(self):
         pass
 
