@@ -142,6 +142,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             self.service.client_conn_failed(reason, self)
 
     def clientConnectionLost(self, connector, reason):
+        self.logstate('clientConnectionLost')
         p = self.my_proto
         self.my_proto = None
         self.stop_working_on_queue()
@@ -942,7 +943,7 @@ class CassandraClusterPool(service.Service):
         else:
             self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
         if f.last_error is not None and f.last_error.check(*self.retryables):
-            self.log('Retrying right away')
+            self.log('Retrying connection right away')
             self.remove_good_conn(f)
             f.retry()
         else:
