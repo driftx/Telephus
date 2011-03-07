@@ -222,7 +222,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             self.cluster.startService()
             self.pool.startService()
             yield self.pool.describe_cluster_name()
-            self.assertEqual(len(self.pool.nodes), len(self.cluster.ring), msg=str(sorted(self.pool.nodes)))
+            self.assertEqual(len(self.pool.nodes), len(self.cluster.ring))
 
     @defer.inlineCallbacks
     def test_keyspace_connection(self):
@@ -288,97 +288,104 @@ class CassandraClusterPoolTest(unittest.TestCase):
                               retries=3)
 
             # give the timed 'get' a chance to start
-            yield deferwait(0.2)
+            yield deferwait(0.05)
 
-            # kill the connection handling the query
-            conns = self.cluster.get_working_connections()
-            self.assertEqual(len(conns), 1)
-            node, proto = conns[0]
-            proto.transport.loseConnection()
+            workers = self.assertNumWorkers(1)
+            self.killWorkingConn()
 
             # allow reconnect
-            yield deferwait(0.2)
-            newconns = self.cluster.get_working_connections()
-            self.assertEqual(len(newconns), 1)
-            newnode, newproto = newconns[0]
+            yield deferwait(0.1)
+
+            newworkers = self.assertNumWorkers(1)
+
             # we want the preference to be reconnecting the same node
-            self.assertEqual(node, newnode)
+            self.assertEqual(workers[0][0], newworkers[0][0])
             answer = (yield d).column.value
             self.assertEqual(answer, 'val-%s-000-000' % self.ksname)
 
-    def test_resubmit_to_new_conn(self):
-        with self.cluster_and_pool():
-            yield self.make_standard_cfs()
-            yield self.insert_dumb_rows()
-
-            d = self.pool.get('key005', 'Standard1/wait=1.0', '%s-005-000' % self.ksname,
-                              retries=3)
-
-            # give the timed 'get' a chance to start
-            yield deferwait(0.2)
-
-            # kill the backend handling the query
-            conns = self.cluster.get_working_connections()
-            self.assertEqual(len(conns), 1)
-            node, proto = conns[0]
-            node.stopService()
-
-            # allow reconnect
-            yield deferwait(0.2)
-            newconns = self.cluster.get_working_connections()
-            self.assertEqual(len(newconns), 1)
-            newnode, newproto = newconns[0]
-            # we want the preference to be reconnecting the same node
-            self.assertNotEqual(node, newnode)
-            answer = (yield d).column.value
-            self.assertEqual(answer, 'val-%s-005-000' % self.ksname)
-
-            node.startService()
-
     @defer.inlineCallbacks
-    def test_adjust_pool_size(self):
+    def test_resubmit_to_new_conn(self):
         pool_size = 8
 
         with self.cluster_and_pool(pool_size=1):
             yield self.make_standard_cfs()
             yield self.insert_dumb_rows()
 
-            # wait for initial conn
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
             yield deferwait(0.1)
+
+            d = self.pool.get('key005', 'Standard1/wait=1.0', '%s-005-000' % self.ksname,
+                              retries=3)
+
+            # give the timed 'get' a chance to start
+            yield deferwait(0.1)
+
+            workers = self.assertNumWorkers(1)
+            node = self.killWorkingNode()
+
+            # allow reconnect
+            yield deferwait(0.5)
+            newworkers = self.assertNumWorkers(1)
+
+            # reconnect should have been to a different node
+            self.assertNotEqual(workers[0][0], newworkers[0][0])
+
+            answer = (yield d).column.value
+            self.assertEqual(answer, 'val-%s-005-000' % self.ksname)
+
+        self.flushLoggedErrors()
+
+    @defer.inlineCallbacks
+    def test_adjust_pool_size(self):
+        pool_size = 8
+        diminish_by = 2
+
+        with self.cluster_and_pool(pool_size=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
 
             # turn up pool size once other nodes are known
             self.pool.adjustPoolSize(pool_size)
-            yield deferwait(0.2)
+            yield deferwait(0.1)
 
-            conns = self.cluster.get_connections()
-            self.assertEqual(len(conns), pool_size)
-            # one conn to each node
-            self.assertEqual(len(set(n for (n,p) in conns)), pool_size)
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(pool_size)
 
             dlist = []
             for x in range(pool_size):
-                d = self.pool.get('key001', 'Standard1/wait=0.5',
-                                  '%s-001-002' % self.ksname, retries=3)
+                d = self.pool.get('key001', 'Standard1/wait=1.0',
+                                  '%s-001-002' % self.ksname, retries=0)
                 d.addCallback(lambda c: c.column.value)
                 d.addCallback(self.assertEqual, 'val-%s-001-002' % self.ksname)
                 dlist.append(d)
 
-            conns = self.cluster.get_connections()
-            self.assertEqual(len(conns), pool_size)
-            # one conn to each node
-            self.assertEqual(len(set(n for (n,p) in conns)), pool_size)
-
-            # turn down pool size
-            self.pool.adjustPoolSize(pool_size - 2)
             yield deferwait(0.1)
 
-            conns = self.cluster.get_connections()
-            self.assertEqual(len(conns), pool_size - 2)
+            for d in dlist:
+                self.assertNotFired(d)
+            self.assertNumConnections(pool_size)
+            self.assertNumWorkers(pool_size)
+            self.assertNumUniqueConnections(pool_size)
+
+            # turn down pool size
+            self.pool.adjustPoolSize(pool_size - diminish_by)
+            yield deferwait(0.1)
+
+            # still pool_size conns until the ongoing requests finish
+            for d in dlist:
+                self.assertNotFired(d)
+            self.assertNumConnections(pool_size)
+            self.assertEqual(len(self.pool.dying_conns), diminish_by)
 
             result = yield defer.DeferredList(dlist, consumeErrors=True)
             for succ, answer in result:
                 if not succ:
                     answer.raiseException()
+            yield deferwait(0.1)
+
+            self.assertNumConnections(pool_size - diminish_by)
+            self.assertNumWorkers(0)
 
     @defer.inlineCallbacks
     def test_zero_retries(self):
@@ -389,13 +396,11 @@ class CassandraClusterPoolTest(unittest.TestCase):
                               '%s-006-002' % self.ksname, retries=0)
 
             yield deferwait(0.05)
-            conns = self.cluster.get_working_connections()
-            self.assertEqual(len(conns), 1)
+            self.assertNumWorkers(1)
 
             # kill the connection handling the query- an immediate retry
             # should work, if a retry is attempted
-            node, proto = conns[0]
-            proto.transport.loseConnection()
+            self.killWorkingConn()
 
             yield self.assertFailure(d, TTransport.TTransportException)
 
@@ -408,9 +413,6 @@ class CassandraClusterPoolTest(unittest.TestCase):
         pass
 
     def test_huge_pool(self):
-        pass
-
-    def test_finish_and_die(self):
         pass
 
     def test_problematic_conns(self):
@@ -442,13 +444,11 @@ class CassandraClusterPoolTest(unittest.TestCase):
                 no_nodes_called[0] = True
             self.pool.on_insufficient_nodes = on_no_nodes
 
-            conns = self.cluster.get_connections()
-            self.assertEqual(len(conns), 1)
-            node, proto = conns[0]
-            node.stopService()
+            self.assertNumConnections(1)
+            node = self.killSomeNode()
             yield deferwait(0.05)
 
-            self.assert_(no_nodes_called[0])
+            self.assert_(no_nodes_called[0], msg='on_no_nodes was not called')
 
             node.startService()
             d = self.pool.get('key004', 'Standard1', '%s-004-007' % self.ksname,
@@ -463,8 +463,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield self.make_standard_cfs()
             yield self.insert_dumb_rows()
 
-            conns = self.cluster.get_connections()
-            self.assertEqual(len(conns), 1)
+            self.assertNumConnections(1)
 
             d = self.pool.get('key004', 'Standard1/wait=1.0',
                               '%s-004-008' % self.ksname, retries=4)
@@ -476,10 +475,8 @@ class CassandraClusterPoolTest(unittest.TestCase):
                     d.cancel()
             self.pool.on_insufficient_conns = cancel_if_no_conns
 
-            workers = self.cluster.get_working_connections()
-            self.assertEqual(len(workers), 1)
-            node, proto = workers[0]
-            node.stopService()
+            self.assertNumWorkers(1)
+            self.killWorkingNode()
             yield deferwait(0.05)
 
             self.assertFired(d)
