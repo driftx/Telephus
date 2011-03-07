@@ -32,6 +32,60 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def assertFired(self, d):
         self.assert_(d.called, msg='%s has not been fired' % (d,))
 
+    def assertNotFired(self, d):
+        self.assertNot(d.called, msg='Expected %s not to have been fired, but'
+                                     ' it has been fired.' % (d,))
+
+    def assertNumConnections(self, num):
+        conns = self.cluster.get_connections()
+        self.assertEqual(len(conns), num,
+                         msg='Expected %d existing connections to cluster, but'
+                             ' %d found.' % (num, len(conns)))
+        return conns
+
+    def assertNumUniqueConnections(self, num):
+        conns = self.cluster.get_connections()
+        conns = set(n for (n,p) in conns)
+        self.assertEqual(len(conns), num,
+                         msg='Expected %d unique nodes in cluster with existing'
+                             ' connections, but %d found.' % (num, len(conns)))
+        return conns
+
+    def assertNumWorkers(self, num):
+        workers = self.cluster.get_working_connections()
+        self.assertEqual(len(workers), num,
+                         msg='Expected %d pending requests being worked on in '
+                             'cluster, but %d found' % (num, len(workers)))
+        return workers
+
+    def killSomeConn(self):
+        conns = self.cluster.get_connections()
+        self.assertNotEqual(len(conns), 0)
+        node, proto = conns[0]
+        proto.transport.loseConnection()
+        return proto
+
+    def killSomeNode(self):
+        conns = self.cluster.get_connections()
+        self.assertNotEqual(len(conns), 0)
+        node, proto = conns[0]
+        node.stopService()
+        return node
+
+    def killWorkingConn(self):
+        conns = self.cluster.get_working_connections()
+        self.assertNotEqual(len(conns), 0)
+        node, proto = conns[0]
+        proto.transport.loseConnection()
+        return proto
+
+    def killWorkingNode(self):
+        conns = self.cluster.get_working_connections()
+        self.assertNotEqual(len(conns), 0)
+        node, proto = conns[0]
+        node.stopService()
+        return node
+
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True):
         cluster = FakeCassandraCluster(num_nodes, start_port=self.start_port)
