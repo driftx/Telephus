@@ -841,12 +841,13 @@ class CassandraClusterPool(service.Service):
             yield max(pending_conns, key=lambda f: self.num_connectors_to(f.node))
 
     def choose_conns_to_kill(self):
+        nodegetter = lambda f: f.node
         # prefer to junk conns to most-redundantly-connected node
         while True:
             active_conns = self.all_active_conns()
             if len(active_conns) == 0:
                 break
-            nodes_and_conns = groupby(active_conns, lambda f: f.node)
+            nodes_and_conns = groupby(sorted(active_conns, key=nodegetter), nodegetter)
             nodes_and_counts = ((n, len(list(conns))) for (n, conns) in nodes_and_conns)
             bestnode, bestcount = max(nodes_and_counts, key=lambda (n,count): count)
             # should be safe from IndexError
