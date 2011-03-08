@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import random
 import contextlib
+from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
@@ -48,7 +49,8 @@ class CassandraClusterPoolTest(unittest.TestCase):
         conns = set(n for (n,p) in conns)
         self.assertEqual(len(conns), num,
                          msg='Expected %d unique nodes in cluster with existing'
-                             ' connections, but %d found.' % (num, len(conns)))
+                             ' connections, but %d found. Whole set: %r'
+                             % (num, len(conns), sorted(conns)))
         return conns
 
     def assertNumWorkers(self, num):
@@ -478,8 +480,77 @@ class CassandraClusterPoolTest(unittest.TestCase):
             for fk in fakes:
                 self.assert_(fk.stopped, msg='Fake %s was not stopped!' % fk.node)
 
+    @defer.inlineCallbacks
     def test_connection_leveling(self):
-        pass
+        num_nodes = 8
+        conns_per_node = 10
+        tolerance_factor = 0.20
+
+        def assertConnsPerNode(numconns):
+            tolerance = int(tolerance_factor * numconns)
+            conns = self.cluster.get_connections()
+            pernode = {}
+            for node, nodeconns in groupby(sorted(conns), lambda (n,p): n):
+                pernode[node] = len(list(nodeconns))
+            for node, conns_here in pernode.items():
+                self.assertApproximates(numconns, conns_here, tolerance,
+                                        msg='Expected ~%r (+- %r) connections to %r,'
+                                            ' but found %r. Whole map: %r'
+                                            % (numconns, tolerance, node, conns_here,
+                                               pernode))
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1):
+            pool_size = num_nodes * conns_per_node
+
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.3)
+
+            # make sure conns are (at least mostly) balanced
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(num_nodes)
+
+            assertConnsPerNode(conns_per_node)
+
+            # kill a node and make sure connections are remade in a
+            # balanced way
+            node = self.killSomeNode()
+            yield deferwait(0.6)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(num_nodes - 1)
+
+            assertConnsPerNode(pool_size / (num_nodes - 1))
+
+            # lower pool size, check that connections are killed in a
+            # balanced way
+            new_pool_size = pool_size - conns_per_node
+            self.pool.adjustPoolSize(new_pool_size)
+            yield deferwait(0.2)
+
+            self.assertNumConnections(new_pool_size)
+            self.assertNumUniqueConnections(num_nodes - 1)
+
+            assertConnsPerNode(new_pool_size / (num_nodes - 1))
+
+            # restart the killed node again and wait for the pool to notice
+            # that it's up
+            node.startService()
+            yield deferwait(0.5)
+
+            # raise pool size again, check balanced
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.2)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(num_nodes)
+
+            assertConnsPerNode(conns_per_node)
+
+        self.flushLoggedErrors()
 
     def test_huge_pool(self):
         pass
@@ -519,10 +590,10 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield deferwait(0.1)
 
             conns = self.assertNumConnections(pool_size)
-            uniqconns = set(n for (n,p) in self.cluster.get_connections())
-            self.assert_(len(uniqconns) >= (pool_size - 2),
+            uniqnodes = set(n for (n,p) in conns)
+            self.assert_(len(uniqnodes) >= (num_nodes - 1),
                          msg='Expected %d or more unique connected nodes, but found %d'
-                             % (pool_size - 2, len(uniqconns)))
+                             % (num_nodes - 1, len(uniqnodes)))
             self.assertNumWorkers(0)
 
         self.flushLoggedErrors()
@@ -553,6 +624,8 @@ class CassandraClusterPoolTest(unittest.TestCase):
             addtimeout(d, 3.0)
             answer = yield d
             self.assertEqual(answer.column.value, 'val-%s-004-007' % self.ksname)
+
+        self.flushLoggedErrors()
 
     @defer.inlineCallbacks
     def test_last_conn_loss_during_request(self):
