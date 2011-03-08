@@ -414,7 +414,7 @@ class CassandraNode:
 
     history_interval = 86400
     max_delay = 180
-    initial_delay = 0.5
+    initial_delay = 0.05
 
     # NIST backoff factors
     factor = protocol.ReconnectingClientFactory.factor
@@ -447,13 +447,33 @@ class CassandraNode:
         self.record_hist(None)
 
     def conn_fail(self, reason):
-        now = time()
+        # these tend to come in clusters. if the same error was received
+        # recently (before the reconnect delay expired), return False to
+        # indicate the event is not 'notable', and don't bump the delay
+        # to a higher level.
+        is_notable = self.is_failure_notable(reason)
         self.record_hist(reason.value)
-        newdelay = min(self.reconnect_delay * self.factor, self.max_delay)
-        if self.jitter:
-            newdelay = random.normalvariate(newdelay, newdelay * self.jitter)
-        self.reconnect_delay = newdelay
-        self.can_reconnect_at = now + newdelay
+        if is_notable:
+            newdelay = min(self.reconnect_delay * self.factor, self.max_delay)
+            if self.jitter:
+                newdelay = random.normalvariate(newdelay, newdelay * self.jitter)
+            self.reconnect_delay = newdelay
+            self.can_reconnect_at = time() + newdelay
+        else:
+            # reset but use the same delay
+            self.can_reconnect_at = time() + self.reconnect_delay
+        return is_notable
+
+    def is_failure_notable(self, reason):
+        try:
+            tstamp, last_err = self.history[-1]
+        except IndexError:
+            pass
+        else:
+            if type(last_err) is type(reason.value):
+                if time() < self.can_reconnect_at:
+                    return False
+        return True
 
     def seconds_until_connect_ok(self):
         return self.can_reconnect_at - time()
@@ -541,7 +561,6 @@ class CassandraClusterPool(service.Service):
     on_insufficient_nodes = staticmethod(lame_log_insufficient_nodes)
     on_insufficient_conns = staticmethod(noop)
     request_retries = 0
-    suppress_same_err_window = 2.0
     conn_factory = CassandraPoolReconnectorFactory
 
     retryables = (IOError, socket.error, Thrift.TException,
@@ -768,6 +787,8 @@ class CassandraClusterPool(service.Service):
 
         conntime = node.seconds_until_connect_ok()
         if conntime > 0:
+            self.log("not considering %r for new connection; has %r left on "
+                     "connect blackout" % (node, conntime))
             return -conntime
         numconns = self.num_connectors_to(node)
         if numconns >= self.max_connections_per_node:
@@ -784,6 +805,7 @@ class CassandraClusterPool(service.Service):
 
         if newsize < 0:
             raise ValueError("pool size must be nonnegative")
+        self.log("Adjust pool size from %d to %d." % (self.target_pool_size, newsize))
         self.target_pool_size = newsize
         self.kill_excess_pending_conns()
         self.kill_excess_conns()
@@ -835,6 +857,7 @@ class CassandraClusterPool(service.Service):
         if killnum <= 0:
             return
         for n, f in izip(xrange(killnum), self.choose_pending_conns_to_kill()):
+            self.log("Aborting pending conn to %r" % (f.node,))
             f.stopFactory()
             self.remove_connector(f)
 
@@ -843,6 +866,7 @@ class CassandraClusterPool(service.Service):
         if need_to_kill <= 0:
             return
         for n, f in izip(xrange(need_to_kill), self.choose_conns_to_kill()):
+            self.log("Draining conn to %r" % (f.node,))
             f.finish_and_die()
             self.remove_connector(f)
             self.dying_conns.add(f)
@@ -906,24 +930,12 @@ class CassandraClusterPool(service.Service):
                 pass
 
     def client_conn_failed(self, reason, f):
-        # these tend to come in clusters. if the same error was received for
-        # this same node in the last suppress_same_err_window seconds, don't
-        # log it, and don't bother pushing another fill_pool attempt.
-        log_it = True
-        try:
-            tstamp, last_err = f.node.history[-1]
-        except IndexError:
-            pass
-        else:
-            if type(last_err) is type(reason.value):
-                if (time() - tstamp) < self.suppress_same_err_window:
-                    log_it = False
-        f.node.conn_fail(reason)
+        is_notable = f.node.conn_fail(reason)
         f.stopFactory()
         self.remove_connector(f)
-        if log_it:
+        if is_notable:
             self.err(reason, 'Thrift pool connection to %s failed' % (f.node,))
-            self.fill_pool()
+        self.fill_pool()
 
     def client_conn_made(self, f):
         d = f.prep_connection(self.creds, self.keyspace, check_ver=self.check_api_ver)
@@ -942,7 +954,7 @@ class CassandraClusterPool(service.Service):
             self.log('Thrift pool connection to %s failed (cleanly)' % (f.node,))
         else:
             self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
-        if f.last_error is not None and f.last_error.check(*self.retryables):
+        if f.last_error is None or f.last_error.check(*self.retryables):
             self.log('Retrying connection right away')
             self.remove_good_conn(f)
             f.retry()
