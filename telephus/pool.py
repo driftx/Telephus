@@ -36,7 +36,6 @@ TODO:
       actually in the same cluster
     * take node error/connection history into account with add_connection_score
     * remove nodes that have been missing or unconnectable for too long
-    * don't re-add manually removed nodes
     * when seed node list is shofter than requested pool size, don't try to
       fill the pool completely until after a seed node is contacted and an
       initial live-node list collected
@@ -634,6 +633,7 @@ class CassandraClusterPool(service.Service):
         self.request_queue = defer.DeferredQueue()
         self.check_api_ver = check_api_ver
         self.future_fill_pool = None
+        self.removed_nodes = set()
         self._client_instance = CassandraClient(self)
 
         if reactor is None:
@@ -694,6 +694,8 @@ class CassandraClusterPool(service.Service):
             node = CassandraNode(*node)
         if node in self.nodes:
             raise ValueError("%s is already known" % (node,))
+        if node in self.removed_nodes:
+            self.removed_nodes.remove(node)
         self.nodes.add(node)
 
     def removeNode(self, node):
@@ -706,7 +708,9 @@ class CassandraClusterPool(service.Service):
             if f.node == node:
                 f.stopFactory()
                 self.remove_connector(f)
-        self.nodes.remove(n)
+        self.removed_nodes.add(node)
+        self.nodes.remove(node)
+        self.fill_pool()
 
     def err(self, _stuff=None, _why=None, **kw):
         if _stuff is None:
@@ -820,7 +824,7 @@ class CassandraClusterPool(service.Service):
                 else:
                     port = self.thrift_port
                 node = CassandraNode(addr, port)
-                if node not in self.nodes:
+                if node not in self.removed_nodes and node not in self.nodes:
                     self.addNode(node)
 
     def choose_nodes_to_connect(self):
