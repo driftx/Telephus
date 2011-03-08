@@ -598,8 +598,36 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.flushLoggedErrors()
 
+    @defer.inlineCallbacks
     def test_manual_node_remove(self):
-        pass
+        num_nodes = 5
+        pool_size = 10
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.2)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(num_nodes)
+
+            n = iter(self.pool.nodes).next()
+            self.pool.removeNode(n)
+            yield deferwait(0.2)
+
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(num_nodes - 1)
+
+            # ask for one extra connection, to make sure the removed node
+            # isn't re-added and connected to
+            self.pool.adjustPoolSize(pool_size + 1)
+            yield deferwait(0.1)
+
+            self.assertNumConnections(pool_size + 1)
+            self.assertNumUniqueConnections(num_nodes - 1)
 
     @defer.inlineCallbacks
     def test_conn_loss_during_idle(self):
