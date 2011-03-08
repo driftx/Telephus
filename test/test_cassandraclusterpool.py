@@ -89,8 +89,11 @@ class CassandraClusterPoolTest(unittest.TestCase):
         return node
 
     @contextlib.contextmanager
-    def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True):
-        cluster = FakeCassandraCluster(num_nodes, start_port=self.start_port)
+    def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
+                         cluster_class=None):
+        if cluster_class is None:
+            cluster_class = FakeCassandraCluster
+        cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
                                     pool_size=pool_size)
         if start:
@@ -558,8 +561,42 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def test_problematic_conns(self):
         pass
 
+    @defer.inlineCallbacks
     def test_manual_node_add(self):
-        pass
+        num_nodes = 3
+        pool_size = 5
+
+        class LyingCassanovaNode(cassanova.CassanovaNode):
+            def endpoint_str(self):
+                return '127.0.0.1:%d' % (self.addr.port + 1000)
+        class LyingFakeCluster(FakeCassandraCluster):
+            node_class = LyingCassanovaNode
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1,
+                                   cluster_class=LyingFakeCluster):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows()
+
+            self.pool.conn_timeout = 0.5
+
+            # turn up pool size once other nodes are known
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.2)
+
+            # shouldn't have been able to find any nodes besides the seed
+            self.assertNumConnections(pool_size)
+            self.assertNumUniqueConnections(1)
+
+            # add address for a second real node, raise pool size so new
+            # connections are made
+            self.pool.addNode((self.cluster.iface, self.cluster.port + 1))
+            self.pool.adjustPoolSize(pool_size * 2)
+            yield deferwait(0.4)
+
+            self.assertNumConnections(pool_size * 2)
+            self.assertNumUniqueConnections(2)
+
+        self.flushLoggedErrors()
 
     def test_manual_node_remove(self):
         pass
@@ -698,6 +735,8 @@ class FakeCassandraCluster(cassanova.CassanovaService):
     describe_ring output.
     """
 
+    node_class = EnhancedCassanovaNode
+
     def __init__(self, num_nodes, start_port=41356, interface='127.0.0.1'):
         cassanova.CassanovaService.__init__(self, start_port)
         self.waiters = []
@@ -713,7 +752,7 @@ class FakeCassandraCluster(cassanova.CassanovaService):
         )
 
     def add_node_on_port(self, port, token=None):
-        node = EnhancedCassanovaNode(port, self.iface, token=token)
+        node = self.node_class(port, self.iface, token=token)
         node.setServiceParent(self)
         self.ring[node.mytoken] = node
 
