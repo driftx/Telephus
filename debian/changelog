@@ -1,3 +1,12 @@
+python-telephus (0.7) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + add Cassandra connection pool management module, pool.py
+  * Tyler Hobbs <tyler@datastax.com>:
+    + implement TTL support
+
+ -- paul cannon <paul@riptano.com>  Wed, 09 Mar 2011 16:14:21 -0600
+
 python-telephus (0.7~rc3) unstable; urgency=low
 
   * paul cannon <paul@riptano.com>:
