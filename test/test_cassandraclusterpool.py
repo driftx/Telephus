@@ -9,7 +9,11 @@ from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory
                            CassandraPoolParticipantClient, TTransport)
 from telephus.cassandra import Cassandra, constants
 from telephus.cassandra.ttypes import *
-from Cassanova import cassanova
+
+try:
+    from Cassanova import cassanova
+except ImportError:
+    cassanova = None
 
 def deferwait(s, result=None):
     def canceller(my_d):
@@ -719,74 +723,78 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.flushLoggedErrors()
 
-class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
-    """
-    Add a way to request operations which are guaranteed to take (at least) a
-    given amount of time, for easier testing of things which might take a long
-    time in the real world
-    """
+if cassanova:
+    class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
+        """
+        Add a way to request operations which are guaranteed to take (at least) a
+        given amount of time, for easier testing of things which might take a long
+        time in the real world
+        """
 
-    def get(self, key, column_path, consistency_level):
-        args = []
-        if '/' in column_path.column_family:
-            parts = column_path.column_family.split('/')
-            column_path.column_family = parts[0]
-            args = parts[1:]
-        d = defer.maybeDeferred(cassanova.CassanovaInterface.get, self, key,
-                                column_path, consistency_level)
-        waittime = 0
-        for arg in args:
-            if arg.startswith('wait='):
-                waittime += float(arg[5:])
-        if waittime > 0:
-            def doWait(x):
-                waiter = deferwait(waittime, x)
-                self.service.waiters.append(waiter)
-                return waiter
-            d.addCallback(doWait)
-        return d
+        def get(self, key, column_path, consistency_level):
+            args = []
+            if '/' in column_path.column_family:
+                parts = column_path.column_family.split('/')
+                column_path.column_family = parts[0]
+                args = parts[1:]
+            d = defer.maybeDeferred(cassanova.CassanovaInterface.get, self, key,
+                                    column_path, consistency_level)
+            waittime = 0
+            for arg in args:
+                if arg.startswith('wait='):
+                    waittime += float(arg[5:])
+            if waittime > 0:
+                def doWait(x):
+                    waiter = deferwait(waittime, x)
+                    self.service.waiters.append(waiter)
+                    return waiter
+                d.addCallback(doWait)
+            return d
 
-class EnhancedCassanovaFactory(cassanova.CassanovaFactory):
-    handler_factory = EnhancedCassanovaInterface
+    class EnhancedCassanovaFactory(cassanova.CassanovaFactory):
+        handler_factory = EnhancedCassanovaInterface
 
-class EnhancedCassanovaNode(cassanova.CassanovaNode):
-    factory = EnhancedCassanovaFactory
+    class EnhancedCassanovaNode(cassanova.CassanovaNode):
+        factory = EnhancedCassanovaFactory
 
-    def endpoint_str(self):
-        return '%s:%d' % (self.addr.host, self.addr.port)
+        def endpoint_str(self):
+            return '%s:%d' % (self.addr.host, self.addr.port)
 
-class FakeCassandraCluster(cassanova.CassanovaService):
-    """
-    Tweak the standard Cassanova service to allow nodes to run on the same
-    interface, but different ports. CassandraClusterPool already knows how
-    to understand the 'host:port' type of endpoint description in
-    describe_ring output.
-    """
+    class FakeCassandraCluster(cassanova.CassanovaService):
+        """
+        Tweak the standard Cassanova service to allow nodes to run on the same
+        interface, but different ports. CassandraClusterPool already knows how
+        to understand the 'host:port' type of endpoint description in
+        describe_ring output.
+        """
 
-    node_class = EnhancedCassanovaNode
+        node_class = EnhancedCassanovaNode
 
-    def __init__(self, num_nodes, start_port=41356, interface='127.0.0.1'):
-        cassanova.CassanovaService.__init__(self, start_port)
-        self.waiters = []
-        self.iface = interface
-        for n in range(num_nodes):
-            self.add_node_on_port(start_port + n)
-        # make a non-system keyspace so that describe_ring can work
-        self.keyspaces['dummy'] = cassanova.KsDef(
-            'dummy',
-            replication_factor=1,
-            strategy_class='org.apache.cassandra.locator.SimpleStrategy',
-            cf_defs=[]
-        )
+        def __init__(self, num_nodes, start_port=41356, interface='127.0.0.1'):
+            cassanova.CassanovaService.__init__(self, start_port)
+            self.waiters = []
+            self.iface = interface
+            for n in range(num_nodes):
+                self.add_node_on_port(start_port + n)
+            # make a non-system keyspace so that describe_ring can work
+            self.keyspaces['dummy'] = cassanova.KsDef(
+                'dummy',
+                replication_factor=1,
+                strategy_class='org.apache.cassandra.locator.SimpleStrategy',
+                cf_defs=[]
+            )
 
-    def add_node_on_port(self, port, token=None):
-        node = self.node_class(port, self.iface, token=token)
-        node.setServiceParent(self)
-        self.ring[node.mytoken] = node
+        def add_node_on_port(self, port, token=None):
+            node = self.node_class(port, self.iface, token=token)
+            node.setServiceParent(self)
+            self.ring[node.mytoken] = node
 
-    def stopService(self):
-        cassanova.CassanovaService.stopService(self)
-        for d in self.waiters:
-            if not d.called:
-                d.cancel()
-                d.addErrback(lambda n: None)
+        def stopService(self):
+            cassanova.CassanovaService.stopService(self)
+            for d in self.waiters:
+                if not d.called:
+                    d.cancel()
+                    d.addErrback(lambda n: None)
+
+if not cassanova:
+    del CassandraClusterPoolTest
