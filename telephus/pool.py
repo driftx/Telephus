@@ -892,12 +892,17 @@ class CassandraClusterPool(service.Service):
                 self.make_conn(node)
         except NoNodesAvailable, e:
             waittime = e.args[0]
+            pending_requests = len(self.request_queue.pending)
             if self.on_insufficient_nodes:
                 self.on_insufficient_nodes(self.num_active_conns(),
                                            self.target_pool_size,
-                                           len(self.request_queue.pending),
+                                           pending_requests,
                                            waittime if waittime != float('Inf') else None)
             self.schedule_future_fill_pool(e.args[0])
+            if self.num_connectors() == 0 and pending_requests > 0:
+                if self.on_insufficient_conns:
+                    self.on_insufficient_conns(self.num_connectors(),
+                                               pending_requests)
 
     def schedule_future_fill_pool(self, seconds):
         if seconds == float('Inf'):
@@ -978,12 +983,15 @@ class CassandraClusterPool(service.Service):
         return req_d
 
     def pushRequest_really(self, req, keyspace, req_d, retries):
+        call_insuff_conns = False
         if len(self.request_queue.waiting) == 0:
             # no workers are immediately available
             if self.on_insufficient_conns:
-                self.on_insufficient_conns(self.num_connectors(),
-                                           len(self.request_queue.pending) + 1)
+                call_insuff_conns = True
         self.request_queue.put((req, keyspace, req_d, retries))
+        if call_insuff_conns:
+            self.on_insufficient_conns(self.num_connectors(),
+                                       len(self.request_queue.pending))
 
     def resubmit(self, req, keyspace, req_d, retries):
         """
