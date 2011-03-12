@@ -559,7 +559,7 @@ class CassandraClusterPool(service.Service):
     max_connections_per_node = 25
     on_insufficient_nodes = staticmethod(lame_log_insufficient_nodes)
     on_insufficient_conns = staticmethod(noop)
-    request_retries = 0
+    request_retries = 4
     conn_factory = CassandraPoolReconnectorFactory
 
     retryables = (IOError, socket.error, Thrift.TException,
@@ -977,7 +977,7 @@ class CassandraClusterPool(service.Service):
     def pushRequest(self, req, retries=None, keyspace=None):
         if keyspace is None:
             keyspace = self.keyspace
-        retries = retries or self.request_retries
+        retries = retries if retries is not None else self.request_retries
         req_d = defer.Deferred()
         self.pushRequest_really(req, keyspace, req_d, retries)
         return req_d
