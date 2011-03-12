@@ -723,6 +723,35 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.flushLoggedErrors()
 
+    @defer.inlineCallbacks
+    def test_main_seed_down(self):
+        with self.cluster_and_pool(pool_size=1, num_nodes=2):
+            yield self.make_standard_cfs()
+            yield self.insert_dumb_rows(numkeys=20)
+
+            self.pool.adjustPoolSize(5)
+            yield deferwait(0.1)
+            self.assertNumConnections(5)
+            self.assertNumUniqueConnections(2)
+
+            # kill the first seed node
+            startnode = [node for (node, proto) in self.cluster.get_connections()
+                              if node.addr.port == self.start_port]
+            startnode[0].stopService()
+
+            # submit a bunch of read requests
+            dlist = []
+            keys = yield self.pool.get_range_slices('Standard1', start='',
+                                                    count=10, column_count=0)
+            for k in keys:
+                d = self.pool.get_range_slices('Standard1', start=k.key, finish=k.key,
+                                               column_count=10)
+                dlist.append(d)
+
+            yield defer.DeferredList(dlist, fireOnOneErrback=True)
+
+        self.flushLoggedErrors()
+
 if cassanova:
     class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
         """
