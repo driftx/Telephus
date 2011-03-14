@@ -1,3 +1,92 @@
+python-telephus (0.7~rc3) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + avoid twisted's overly eager traceback trimming
+    + fix reconnecting time backoff
+
+ -- paul cannon <paul@riptano.com>  Tue, 25 Jan 2011 21:52:32 -0600
+
+python-telephus (0.7~rc2) unstable; urgency=low
+
+  * Brandon Williams <brandon@riptano.com>:
+    + Update example.py
+    + Kwargify args
+
+ -- paul cannon <paul@riptano.com>  Thu, 16 Dec 2010 14:39:13 -0600
+
+python-telephus (0.7~beta3.3) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + update thrift interface to match cassandra 0.7 pre-rc
+    + accept backward-compatible api ver mismatches when
+      check_api_version is True
+
+ -- paul cannon <paul@riptano.com>  Mon, 08 Nov 2010 16:02:38 -0600
+
+python-telephus (0.7~beta3.2) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + fix connection failure handling
+    + optionally check for matching API ver on connect
+
+ -- paul cannon <paul@riptano.com>  Mon, 08 Nov 2010 14:54:37 -0600
+
+python-telephus (0.7~beta3.1) unstable; urgency=low
+
+  * paul cannon <paul@riptano.com>:
+    + allow defer.fail to get current traceback
+    + improvements to test suite
+    + bump dependency to thrift 0.5.0
+    + update thrift interface to match cassandra 0.7~beta3
+    + ease python-twisted requirement to python-twisted-core
+  * Brandon Williams <brandon@riptano.com>:
+    + dialed back schema agreement check rate
+    + improvements to test suite
+  * Matthew Williams <mwilliams@domU-12-31-39-0A-2C-67.compute-1.internal>:
+    + added schema agreement check to system_* calls
+    + implemented get_indexed_slices & disabled test_bad_params
+
+ -- paul cannon <paul@riptano.com>  Wed, 03 Nov 2010 17:18:29 -0500
+
+python-telephus (0.7~beta3) unstable; urgency=low
+
+  * Brandon Williams <brandon@riptano.com>:
+    + Drop unusable connection if submitRequest raises an Exception
+    + Update/add methods for new generated code
+    + Update thrift generated code
+    + check_schema_agreement is now describe_schema_versions
+  * Author: paul cannon <paul@riptano.com>
+    + add describe_snitch() and tests
+    + tests for keyspace/cf manipulation
+
+ -- paul cannon <paul@aang.riptano.com>  Tue, 05 Oct 2010 15:01:40 -0500
+
+python-telephus (0.7~beta2) unstable; urgency=low
+
+  * Additional fixes by Brandon Williams <brandon@riptano.com>:
+    + Allow authentication of all connections
+    + Allow switching all connections to a different keyspace
+    + Remove get_string calls
+    + get_count accepts a predicate
+    + Abstract predicate generation, multiget uses multiget_slice
+    + Fix broken tests
+    + Fix insert params
+    + Wrap default timestamp in a Clock, use microseconds
+    + Errback when submitRequest raises an exception
+  * Additional fixes by paul cannon <paul@riptano.com>:
+    + work when CF names are given as unicode objects
+    + fix system_add_column_family, system_add_keyspace
+
+ -- paul cannon <paul@riptano.com>  Thu, 02 Sep 2010 12:25:43 -0600
+
+python-telephus (0.7~beta1) unstable; urgency=low
+
+  * Add describe_version
+  * Update to work with Cassandra 0.7.x HEAD r985573
+  * Merge updates from Paul Cannon
+
+ -- Brandon Williams <brandon@riptano.com>  Sun, 15 Aug 2010 08:40:00 +0000
+
 python-telephus (0.6.3) unstable; urgency=low
 
   * Errback when submitRequest raises an Exception
