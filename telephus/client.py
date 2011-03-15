@@ -49,7 +49,8 @@ class CassandraClient(object):
         agreement = False
         while not agreement:
             result = yield self.describe_schema_versions()
-            agreement = len(result) == 1
+            live_vers = [skey for (skey, nlist) in result.items() if skey != 'UNREACHABLE']
+            agreement = len(live_vers) == 1
             d = defer.Deferred()
             reactor.callLater(0.1, d.callback, True)
             yield d
