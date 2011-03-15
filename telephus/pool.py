@@ -101,6 +101,11 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
         TTwisted.ThriftClientProtocol.connectionMade(self)
         self.factory.clientConnectionMade(self)
 
+    def connectionLost(self, reason):
+        TTwisted.ThriftClientProtocol.connectionLost(self, reason)
+        del self.client._reqs
+        del self.client
+
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
     connector = None
@@ -1061,3 +1066,9 @@ class CassandraClusterPool(service.Service):
         """
         return CassandraClient(CassandraKeyspaceConnection(self, keyspace),
                                consistency=consistency)
+
+    def __str__(self):
+        return '<%s: [%d nodes known] [%d connections]>' \
+               % (self.__class__.__name__, len(self.nodes), self.num_active_conns())
+
+    __repr__ = __str__
