@@ -309,11 +309,11 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def job(self, _name, _func, *args, **kw):
         self.logstate('start job %s' % _name)
-        d = defer.maybeDeferred(_func, *args, **kw)
         if self.jobphase is not None:
             raise ClientBusy('Tried to start job phase %s while in %s'
                              % (_name, self.jobphase))
         self.jobphase = _name
+        d = defer.maybeDeferred(_func, *args, **kw)
         self.job_d = d
         d.addBoth(self.clear_job)
         return d
@@ -324,6 +324,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if retries > 0 and self.service is not None \
         and err.check(*self.service.retryables):
             self.logstate('-- resubmit --')
+            assert self.jobphase is None, \
+                    'Factory might retry its own fatal error'
             self.service.resubmit(req, keyspace, req_d, retries - 1)
         else:
             self.logstate('-- giving up [retries=%d service=%s err=%s] --'
@@ -341,10 +343,17 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return d
 
     def maybe_do_more_work(self, _, q):
-        if not self.keep_working:
-            self.stopFactory()
-        elif self.service is not None:
-            self.work_on_queue(q)
+        # it's possible this is being called as part of the immediate callback
+        # chain after the protocol's connectionLost errbacking. if so, our own
+        # connectionLost hasn't been called yet. allow all current processing
+        # to finish before deciding whether we get to do more.
+        def _real_maybe_do_more_work():
+            if not self.keep_working:
+                self.stopFactory()
+            elif self.service is not None:
+                self.work_on_queue(q)
+        if self.service is not None:
+            self.service.reactor.callLater(0, _real_maybe_do_more_work)
 
     def scream_like_a_little_girl(self, fail):
         if self.service is not None:
