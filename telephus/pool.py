@@ -102,7 +102,15 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
         self.factory.clientConnectionMade(self)
 
     def connectionLost(self, reason):
-        TTwisted.ThriftClientProtocol.connectionLost(self, reason)
+        # the TTwisted version of this call does not account for the
+        # possibility of other things happening during the errback.
+        tex = TTransport.TTransportException(
+            type=TTransport.TTransportException.END_OF_FILE,
+            message='Connection closed (%s)' % reason)
+        while self.client._reqs:
+            k = iter(self.client._reqs).next()
+            v = self.client._reqs.pop(k)
+            v.errback(tex)
         del self.client._reqs
         del self.client
 
