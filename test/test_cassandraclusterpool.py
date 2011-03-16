@@ -2,9 +2,11 @@ from __future__ import with_statement
 
 import random
 import contextlib
+from time import time
 from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
+from twisted.python import log
 from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
                            CassandraPoolParticipantClient, TTransport)
 from telephus.cassandra import Cassandra, constants
@@ -311,6 +313,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             self.assertEqual(workers[0][0], newworkers[0][0])
             answer = (yield d).column.value
             self.assertEqual(answer, 'val-%s-000-000' % self.ksname)
+        self.flushLoggedErrors()
 
     @defer.inlineCallbacks
     def test_resubmit_to_new_conn(self):
@@ -562,9 +565,6 @@ class CassandraClusterPoolTest(unittest.TestCase):
     def test_huge_pool(self):
         pass
 
-    def test_problematic_conns(self):
-        pass
-
     @defer.inlineCallbacks
     def test_manual_node_add(self):
         num_nodes = 3
@@ -750,6 +750,82 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
             yield defer.DeferredList(dlist, fireOnOneErrback=True)
 
+        self.flushLoggedErrors()
+
+    @defer.inlineCallbacks
+    def test_lots_of_up_and_down(self):
+        pool_size = 20
+        num_nodes = 10
+        num_ops = 500
+        num_twiddles = 100
+        runtime = 4.0
+        ksname = 'KS'
+        num_keys = 20
+
+        @defer.inlineCallbacks
+        def node_twiddler(optime, numops):
+            end_time = time() + optime
+            wait_per_op = float(optime) / numops
+            log.msg('twiddler starting')
+            while True:
+                if time() > end_time:
+                    break
+                yield deferwait(random.normalvariate(wait_per_op, wait_per_op * 0.2))
+                nodes = self.cluster.get_nodes()
+                running_nodes = [n for n in nodes if n.running]
+                nonrunning = [n for n in nodes if not n.running]
+                if len(running_nodes) <= 1:
+                    op = 'up'
+                elif len(nonrunning) == 0:
+                    op = 'down'
+                else:
+                    op = random.choice(('down', 'up'))
+                if op == 'down':
+                    random.choice(running_nodes).stopService()
+                else:
+                    random.choice(nonrunning).startService()
+            log.msg('twiddler done')
+
+        @defer.inlineCallbacks
+        def work_o_tron(optime, numops, n):
+            log.msg('work_o_tron %d started' % n)
+            end_time = time() + optime
+            wait_per_op = float(optime) / numops
+            opsdone = 0
+            while True:
+                if time() > end_time:
+                    break
+                thiswait = random.normalvariate(wait_per_op, wait_per_op * 0.2)
+                keynum = random.randint(0, num_keys - 1)
+                log.msg('work_o_tron %d getting key%03d, waiting %f' % (n, keynum, thiswait))
+                d = self.pool.get('key%03d' % keynum, 'Standard1/wait=%f' % thiswait,
+                                  '%s-%03d-001' % (ksname, keynum),
+                                  retries=10)
+                result = yield d
+                log.msg('work_o_tron %d got %r' % (n, result))
+                self.assertEqual(result.column.value, 'val-%s-%03d-001' % (ksname, keynum))
+                opsdone += 1
+            log.msg('work_o_tron %d done' % n)
+            self.assertApproximates(opsdone, numops, 0.5 * numops)
+
+        starttime = time()
+        with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes):
+            yield self.make_standard_cfs(ksname)
+            yield self.insert_dumb_rows(ksname, numkeys=num_keys)
+
+            self.pool.adjustPoolSize(pool_size)
+            yield deferwait(0.5)
+
+            twiddler = node_twiddler(runtime, num_twiddles)
+            workers = [work_o_tron(runtime, num_ops / pool_size, n)
+                       for n in range(pool_size)]
+
+            end = yield defer.DeferredList([twiddler] + workers, fireOnOneErrback=True)
+            for num, (succ, result) in enumerate(end):
+                self.assert_(succ, msg='worker %d failed: result: %s' % (num, result))
+        endtime = time()
+
+        self.assertApproximates(endtime - starttime, runtime, 0.5 * runtime)
         self.flushLoggedErrors()
 
 if cassanova:
