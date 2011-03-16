@@ -393,7 +393,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def logstate(self, msg):
         if getattr(self, 'debugging', False):
-            log.msg('%s [%s]: %s' % (self.node, self.jobphase, msg))
+            log.msg('CPRF 0x%x (node %s) [%s]: %s'
+                    % (id(self), self.node, self.jobphase, msg))
 
 class CassandraKeyspaceConnection:
     """
@@ -500,7 +501,8 @@ class CassandraNode:
         return self.can_reconnect_at - time()
 
     def __str__(self):
-        return '<%s %s:%s>' % (self.__class__.__name__, self.host, self.port)
+        return '<%s %s:%s @0x%x>' % (self.__class__.__name__,
+                                     self.host, self.port, id(self))
 
     __repr__ = __str__
 
