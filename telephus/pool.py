@@ -1068,13 +1068,13 @@ class CassandraClusterPool(service.Service):
         """
         return getattr(self._client_instance, name)
 
-    @property
-    def consistency(self):
+    def get_consistency(self):
         return self._client_instance.consistency
 
-    @consistency.setter
-    def consistency(self, value):
+    def set_consistency(self, value):
         self._client_instance.consistency = value
+
+    consistency = property(get_consistency, set_consistency)
 
     def keyspaceConnection(self, keyspace, consistency=ConsistencyLevel.ONE):
         """
