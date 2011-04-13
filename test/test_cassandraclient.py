@@ -37,7 +37,7 @@ class CassandraClientTest(unittest.TestCase):
         self.my_keyspace = KsDef(
             name=KEYSPACE,
             strategy_class='org.apache.cassandra.locator.SimpleStrategy',
-            replication_factor=1,
+            strategy_options={'replication_factor': '1'},
             cf_defs=[
                 CfDef(
                     keyspace=KEYSPACE,
@@ -202,7 +202,7 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_keyspace_manipulation(self):
-        ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', replication_factor=1, cf_defs=[])
+        ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={'replication_factor': '1'}, cf_defs=[])
         yield self.client.system_add_keyspace(ksdef)
         ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
         self.assertEqual(ksdef, ks2)
@@ -229,6 +229,7 @@ class CassandraClientTest(unittest.TestCase):
             column_metadata=[],
             gc_grace_seconds=86400,
             default_validation_class='org.apache.cassandra.db.marshal.BytesType',
+            key_validation_class='org.apache.cassandra.db.marshal.BytesType',
             min_compaction_threshold=5,
             max_compaction_threshold=31,
             row_cache_save_period_in_seconds=0,
@@ -236,6 +237,8 @@ class CassandraClientTest(unittest.TestCase):
             memtable_flush_after_mins=60,
             memtable_throughput_in_mb=249,
             memtable_operations_in_millions=1.1671875,
+            replicate_on_write=False,
+            merge_shards_chance=0.10000000000000001,
         )
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
