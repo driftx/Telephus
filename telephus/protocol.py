@@ -19,7 +19,7 @@ class APIMismatch(Exception):
 
 class ManagedThriftRequest(object):
     def __init__(self, method, *args):
-        self.method = method 
+        self.method = method
         self.args = args
 
 def match_thrift_version(ourversion, remoteversion):
@@ -80,12 +80,12 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
                              # exceptions, the manager handled our failure
             TTwisted.ThriftClientProtocol.connectionLost(self, reason)
         self.factory.clientGone(self)
-        
+
     def _complete(self, res=None):
         self.deferred = None
         self.factory.clientIdle(self)
         return res
-        
+
     def submitRequest(self, request):
         if not self.deferred:
             fun = getattr(self.client, request.method, None)
@@ -98,11 +98,11 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             return d
         else:
             raise ClientBusy
-        
+
     def abort(self):
         self.aborted = True
         self.transport.loseConnection()
-        
+
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
     def __init__(self, client_class, keyspace, credentials, iprot_factory, oprot_factory=None):
         ManagedThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory, keyspace=keyspace)
@@ -175,7 +175,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             self._protos.remove(proto)
         except ValueError:
             pass
-        
+
     def set_keyspace(self, keyspace):
         """ switch all connections to another keyspace """
         self.keyspace = keyspace
@@ -183,7 +183,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         for p in self._protos:
             dfrds.append(p.submitRequest(ManagedThriftRequest('set_keyspace', keyspace)))
         return defer.gatherResults(dfrds)
-    
+
     def login(self, credentials):
         """ authenticate all connections """
         dfrds = []
@@ -191,7 +191,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             dfrds.append(p.submitRequest(ManagedThriftRequest('login',
                     AuthenticationRequest(credentials=credentials))))
         return defer.gatherResults(dfrds)
-            
+
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
             if err.check(InvalidRequestException, InvalidThriftRequest) or r < 1:
@@ -227,14 +227,14 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                                callbackArgs=[deferred],
                                errbackArgs=[request, deferred, retries])
         return self.queue.get().addCallback(_process)
-    
+
     def pushRequest(self, request, retries=None):
         retries = retries or self.request_retries
         d = defer.Deferred()
         self._pending.append(d)
         self.queue.put((request, d, retries))
         return d
-    
+
     def shutdown(self):
         self.stopTrying()
         for p in self._protos:
@@ -242,4 +242,3 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 p.transport.loseConnection()
         for d in self._pending:
             if not d.called: d.errback(UserError(string="Shutdown requested"))
-    
