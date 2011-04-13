@@ -31,7 +31,9 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print '   get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level)'
   print '   get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level)'
   print '  void insert(string key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level)'
+  print '  void add(string key, ColumnParent column_parent, CounterColumn column, ConsistencyLevel consistency_level)'
   print '  void remove(string key, ColumnPath column_path, i64 timestamp, ConsistencyLevel consistency_level)'
+  print '  void remove_counter(string key, ColumnPath path, ConsistencyLevel consistency_level)'
   print '  void batch_mutate( mutation_map, ConsistencyLevel consistency_level)'
   print '  void truncate(string cfname)'
   print '   describe_schema_versions()'
@@ -49,6 +51,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print '  string system_drop_keyspace(string keyspace)'
   print '  string system_update_keyspace(KsDef ks_def)'
   print '  string system_update_column_family(CfDef cf_def)'
+  print '  CqlResult execute_cql_query(string query, Compression compression)'
   print ''
   sys.exit(0)
 
@@ -159,11 +162,23 @@ elif cmd == 'insert':
     sys.exit(1)
   pp.pprint(client.insert(args[0],eval(args[1]),eval(args[2]),eval(args[3]),))
 
+elif cmd == 'add':
+  if len(args) != 4:
+    print 'add requires 4 args'
+    sys.exit(1)
+  pp.pprint(client.add(args[0],eval(args[1]),eval(args[2]),eval(args[3]),))
+
 elif cmd == 'remove':
   if len(args) != 4:
     print 'remove requires 4 args'
     sys.exit(1)
   pp.pprint(client.remove(args[0],eval(args[1]),eval(args[2]),eval(args[3]),))
+
+elif cmd == 'remove_counter':
+  if len(args) != 3:
+    print 'remove_counter requires 3 args'
+    sys.exit(1)
+  pp.pprint(client.remove_counter(args[0],eval(args[1]),eval(args[2]),))
 
 elif cmd == 'batch_mutate':
   if len(args) != 2:
@@ -266,6 +281,12 @@ elif cmd == 'system_update_column_family':
     print 'system_update_column_family requires 1 args'
     sys.exit(1)
   pp.pprint(client.system_update_column_family(eval(args[0]),))
+
+elif cmd == 'execute_cql_query':
+  if len(args) != 2:
+    print 'execute_cql_query requires 2 args'
+    sys.exit(1)
+  pp.pprint(client.execute_cql_query(args[0],eval(args[1]),))
 
 else:
   print 'Unrecognized method %s' % cmd
