@@ -200,18 +200,46 @@ class CassandraClientTest(unittest.TestCase):
         yield self.sleep(2)
         yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
 
+    def compare_keyspaces(self, ks1, ks2):
+        self.assertEqual(ks1.name, ks2.name)
+        self.assertEqual(ks1.strategy_class, ks2.strategy_class)
+        self.assertEqual(ks1.cf_defs, ks2.cf_defs)
+
+        def get_rf(ksdef):
+            rf = ksdef.replication_factor
+            if ksdef.strategy_options and \
+               'replication_factor' in ksdef.strategy_options:
+                rf = int(ksdef.strategy_options['replication_factor'])
+            return rf
+
+        def strat_opts_no_rf(ksdef):
+            if not ksdef.strategy_options:
+                return {}
+            opts = ksdef.strategy_options.copy()
+            if 'replication_factor' in ksdef.strategy_options:
+                del opts['replication_factor']
+            return opts
+
+        self.assertEqual(get_rf(ks1), get_rf(ks2))
+        self.assertEqual(strat_opts_no_rf(ks1), strat_opts_no_rf(ks2))
+
     @defer.inlineCallbacks
     def test_keyspace_manipulation(self):
+        try:
+            yield self.client.system_drop_keyspace(T_KEYSPACE)
+        except InvalidRequestException:
+            pass
         ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={'replication_factor': '1'}, cf_defs=[])
         yield self.client.system_add_keyspace(ksdef)
         ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
-        self.assertEqual(ksdef, ks2)
+        self.compare_keyspaces(ksdef, ks2)
+
         if DO_SYSTEM_RENAMING:
             newname = T_KEYSPACE + '2'
             yield self.client.system_rename_keyspace(T_KEYSPACE, newname)
             ks2 = yield self.client.describe_keyspace(newname)
             ksdef.name = newname
-            self.assertEqual(ksdef, ks2)
+            self.compare_keyspaces(ksdef, ks2)
         yield self.client.system_drop_keyspace(ksdef.name)
         yield self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
         if DO_SYSTEM_RENAMING:
@@ -294,7 +322,7 @@ class CassandraClientTest(unittest.TestCase):
             yield self.client.get('poiqwe', CF, column='foo')
         except Exception, e:
             pass
-    
+
     @defer.inlineCallbacks
     def test_bad_params(self):
         # This test seems to kill the thrift connection, so we're skipping it for now
@@ -317,31 +345,13 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
         cmanager.shutdown()
 
     @defer.inlineCallbacks
-    def test_api_check(self):
-        cmanager = ManagedCassandraClientFactory(check_api_version=False)
-        client = CassandraClient(cmanager)
-        conn = reactor.connectTCP(HOST, PORT, cmanager)
-        # we don't necessarily want to force an api match while testing;
-        # get the remote value and pretend ours matches, even if it doesn't
-        ver = yield client.describe_version()
-        cmanager.shutdown()
-
-        constants.VERSION = ver
-        cmanager = ManagedCassandraClientFactory(check_api_version=True)
-        client = CassandraClient(cmanager)
-        d = cmanager.deferred
-        conn = reactor.connectTCP(HOST, PORT, cmanager)
-        yield d
-        # do something innocuous, make sure connection is good
-        yield client.describe_schema_versions()
-        cmanager.shutdown()
-
-    @defer.inlineCallbacks
-    def test_api_mismatch(self):
-        cmanager = ManagedCassandraClientFactory(check_api_version=True)
-        constants.VERSION = '0.0.0'
-        client = CassandraClient(cmanager)
-        d = cmanager.deferred
-        conn = reactor.connectTCP(HOST, PORT, cmanager)
-        yield self.assertFailure(d, APIMismatch)
-        cmanager.shutdown()
+    def test_api_match(self):
+        for version in [constants.CASSANDRA_07, constants.CASSANDRA_08, None]:
+            cmanager = ManagedCassandraClientFactory(api_version=version)
+            client = CassandraClient(cmanager)
+            d = cmanager.deferred
+            conn = reactor.connectTCP(HOST, PORT, cmanager)
+            yield d
+            # do something innocuous, make sure connection is good
+            yield client.describe_schema_versions()
+            yield cmanager.shutdown()
