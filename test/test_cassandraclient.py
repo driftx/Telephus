@@ -6,6 +6,7 @@ from telephus.client import CassandraClient
 from telephus.cassandra import constants
 from telephus.cassandra.ttypes import *
 import os
+import zlib
 
 CONNS = 5
 
@@ -15,6 +16,8 @@ KEYSPACE = 'TelephusTests'
 T_KEYSPACE = 'TelephusTests2'
 CF = 'Standard1'
 SCF = 'Super1'
+COUNTER_CF = 'Counter1'
+SUPERCOUNTER_CF = 'SuperCounter1'
 IDX_CF = 'IdxTestCF'
 T_CF = 'TransientCF'
 T_SCF = 'TransientSCF'
@@ -61,12 +64,25 @@ class CassandraClientTest(unittest.TestCase):
                             index_type=IndexType.KEYS,
                             index_name='idxCol1')
                     ],
-                    default_validation_class='org.apache.cassandra.db.marshal.BytesType')
+                    default_validation_class='org.apache.cassandra.db.marshal.BytesType'
+                ),
+                CfDef(
+                    keyspace=KEYSPACE,
+                    name=COUNTER_CF,
+                    column_type='Standard',
+                    default_validation_class='org.apache.cassandra.db.marshal.CounterColumnType'
+                ),
+                CfDef(
+                    keyspace=KEYSPACE,
+                    name=SUPERCOUNTER_CF,
+                    column_type='Super',
+                    default_validation_class='org.apache.cassandra.db.marshal.CounterColumnType'
+                ),
             ]
         )
         yield self.client.system_add_keyspace(self.my_keyspace)
         yield self.client.set_keyspace(KEYSPACE)
-    
+
     @defer.inlineCallbacks
     def tearDown(self):
         yield self.client.system_drop_keyspace(self.my_keyspace.name)
@@ -74,9 +90,9 @@ class CassandraClientTest(unittest.TestCase):
         for c in reactor.getDelayedCalls():
             c.cancel()
         reactor.removeAll()
-    
+
     @defer.inlineCallbacks
-    def test_insert_get(self): 
+    def test_insert_get(self):
         yield self.client.insert('test', CF, 'testval', column=COLUMN)
         yield self.client.insert('test2', CF, 'testval2', column=COLUMN)
         yield self.client.insert('test', SCF, 'superval', column=COLUMN, super_column=SCOLUMN)
@@ -97,7 +113,7 @@ class CassandraClientTest(unittest.TestCase):
                                        {COLUMN: 'test', COLUMN2: 'test2'})
         yield self.client.batch_insert('test', SCF,
                                {SCOLUMN: {COLUMN: 'test', COLUMN2: 'test2'}})
-        res = yield self.client.get_slice('test', CF, names=(COLUMN, COLUMN2)) 
+        res = yield self.client.get_slice('test', CF, names=(COLUMN, COLUMN2))
         self.assertEqual(res[0].column.value, 'test')
         self.assertEqual(res[1].column.value, 'test2')
         res = yield self.client.get_slice('test', SCF, names=(COLUMN, COLUMN2),
@@ -106,7 +122,7 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEqual(res[1].column.value, 'test2')
         res = yield self.client.get_count('test', CF)
         self.assertEqual(res, 2)
-        
+
     @defer.inlineCallbacks
     def test_batch_mutate_and_remove(self):
         yield self.client.batch_mutate({'test': {CF: {COLUMN: 'test', COLUMN2: 'test2'}, SCF: { SCOLUMN: { COLUMN: 'test', COLUMN2: 'test2'} } }, 'test2': {CF: {COLUMN: 'test', COLUMN2: 'test2'}, SCF: { SCOLUMN: { COLUMN: 'test', COLUMN2: 'test2'} } } })
@@ -155,7 +171,7 @@ class CassandraClientTest(unittest.TestCase):
         res = yield self.client.multiget(['test', 'test2'], CF, column=COLUMN)
         self.assertEqual(len(res['test']), 0)
         self.assertEqual(len(res['test2']), 0)
-        
+
     @defer.inlineCallbacks
     def test_range_slices(self):
         yield self.client.insert('test', CF, 'testval', column=COLUMN)
@@ -174,6 +190,63 @@ class CassandraClientTest(unittest.TestCase):
         expressions = [IndexExpression('col1', IndexOperator.EQ, 'two')]
         res = yield self.client.get_indexed_slices(IDX_CF, expressions, start_key='')
         self.assertEquals(res[0].columns[0].column.value,'two')
+
+    @defer.inlineCallbacks
+    def test_counter_add(self):
+        # test standard column counter
+        yield self.client.add('test', COUNTER_CF, 1, column='col')
+        res = yield self.client.get('test', COUNTER_CF, column='col')
+        self.assertEquals(res.counter_column.value, 1)
+
+        yield self.client.add('test', COUNTER_CF, 1, column='col')
+        res = yield self.client.get('test', COUNTER_CF, column='col')
+        self.assertEquals(res.counter_column.value, 2)
+
+        # test super column counters
+        yield self.client.add('test', SUPERCOUNTER_CF, 1, column='col', super_column='scol')
+        res = yield self.client.get('test', SUPERCOUNTER_CF, column='col', super_column='scol')
+        self.assertEquals(res.counter_column.value, 1)
+
+        yield self.client.add('test', SUPERCOUNTER_CF, 1, column='col', super_column='scol')
+        res = yield self.client.get('test', SUPERCOUNTER_CF, column='col', super_column='scol')
+        self.assertEquals(res.counter_column.value, 2)
+
+    @defer.inlineCallbacks
+    def test_counter_remove(self):
+        # test standard column counter
+        yield self.client.add('test', COUNTER_CF, 1, column='col')
+        res = yield self.client.get('test', COUNTER_CF, column='col')
+        self.assertEquals(res.counter_column.value, 1)
+
+        yield self.client.remove_counter('test', COUNTER_CF, column='col')
+        yield self.assertFailure(self.client.get('test', COUNTER_CF, column='col'),
+                                 NotFoundException)
+
+        # test super column counters
+        yield self.client.add('test', SUPERCOUNTER_CF, 1, column='col', super_column='scol')
+        res = yield self.client.get('test', SUPERCOUNTER_CF, column='col', super_column='scol')
+        self.assertEquals(res.counter_column.value, 1)
+
+        yield self.client.remove_counter('test', SUPERCOUNTER_CF,
+                                         column='col', super_column='scol')
+        yield self.assertFailure(self.client.get('test', SUPERCOUNTER_CF,
+                                                 column='col', super_column='scol'),
+                                 NotFoundException)
+
+    @defer.inlineCallbacks
+    def test_cql(self):
+        yield self.client.insert('test', CF, 'testval', column='col1')
+        res = yield self.client.get('test', CF, column='col1')
+        self.assertEquals(res.column.value, 'testval')
+
+        query = 'SELECT * from %s where KEY = %s' % (CF, 'test'.encode('hex'))
+        uncompressed_result = yield self.client.execute_cql_query(query, Compression.NONE)
+        self.assertEquals(uncompressed_result.rows[0].columns[0].name, 'col1')
+        self.assertEquals(uncompressed_result.rows[0].columns[0].value, 'testval')
+
+        compressed_query = zlib.compress(query)
+        compressed_result = yield self.client.execute_cql_query(compressed_query, Compression.GZIP)
+        self.assertEquals(uncompressed_result, compressed_result)
 
     def sleep(self, secs):
         d = defer.Deferred()
