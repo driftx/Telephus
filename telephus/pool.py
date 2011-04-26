@@ -54,11 +54,13 @@ from twisted.python import failure, log
 from thrift import Thrift
 from thrift.transport import TTwisted, TTransport
 from thrift.protocol import TBinaryProtocol
-from telephus.protocol import (ManagedThriftRequest, APIMismatch, ClientBusy,
-                               InvalidThriftRequest, match_thrift_version)
-from telephus.cassandra import Cassandra, constants
+from telephus.protocol import (ManagedThriftRequest, ClientBusy,
+                               InvalidThriftRequest)
+from telephus.cassandra.c08 import Cassandra as Cassandra08
 from telephus.cassandra.ttypes import *
+from telephus.cassandra.constants import *
 from telephus.client import CassandraClient
+from translate import *
 
 noop = lambda *a, **kw: None
 
@@ -94,7 +96,7 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
     def __init__(self):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client,
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra08.Client,
                                                self.thriftFactory())
 
     def connectionMade(self):
@@ -129,12 +131,13 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service):
+    def __init__(self, node, service, api_version=None):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
+        self.api_version = api_version
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
@@ -201,7 +204,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             return
         self.connector.connect()
 
-    def prep_connection(self, creds=None, keyspace=None, check_ver=False):
+    def prep_connection(self, creds=None, keyspace=None):
         """
         Do login and set_keyspace tasks as necessary, and also check this
         node's idea of the Cassandra ring. Expects that our connection is
@@ -212,15 +215,12 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         """
 
         d = defer.succeed(0)
-        if check_ver:
+        if self.api_version is None:
             d.addCallback(lambda _: self.my_describe_version())
-            def gotVersion(ver):
-                if not match_thrift_version(constants.VERSION, ver):
-                    raise APIMismatch('%s: %s remote is not compatible with '
-                                      '%s telephus'
-                                      % (self.node, ver, constants.VERSION))
-                return True
-            d.addCallback(gotVersion)
+            d.addCallback(getAPIVersion)
+            def set_version(ver):
+                self.version = ver
+            d.addCallback(set_version)
         if creds is not None:
             d.addCallback(lambda _: self.my_login(creds))
         if keyspace is not None:
@@ -298,7 +298,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             if keyspace is not None and keyspace != self.keyspace:
                 d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-            d.addCallback(lambda _: method(*req.args))
+            args = translateArgs(req, self.api_version)
+            d.addCallback(lambda _: method(*args))
+            d.addCallback(lambda results: postProcess(results, req.method))
         return d
 
     def clear_job(self, x):
@@ -592,7 +594,7 @@ class CassandraClusterPool(service.Service):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None, check_api_ver=False):
+                 log_cb=log.msg, reactor=None, api_version=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -636,7 +638,7 @@ class CassandraClusterPool(service.Service):
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
 
-        @param check_api_ver: Whether the thrift API version number should be
+        @param api_version: Whether the thrift API version number should be
             checked against the one Telephus understands upon originating any
             connection. If the versions are not compatible, the connection to
             that node will be aborted. Default: no
@@ -655,7 +657,7 @@ class CassandraClusterPool(service.Service):
         self.keyspace = keyspace
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
-        self.check_api_ver = check_api_ver
+        self.api_version = None
         self.future_fill_pool = None
         self.removed_nodes = set()
         self._client_instance = CassandraClient(self)
@@ -938,7 +940,7 @@ class CassandraClusterPool(service.Service):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self)
+        f = self.conn_factory(node, self, self.api_version)
         bindaddr=self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
@@ -972,7 +974,7 @@ class CassandraClusterPool(service.Service):
         self.fill_pool()
 
     def client_conn_made(self, f):
-        d = f.prep_connection(self.creds, self.keyspace, check_ver=self.check_api_ver)
+        d = f.prep_connection(self.creds, self.keyspace)
         d.addCallback(self.client_ready, f)
         d.addErrback(self.client_conn_failed, f)
 
