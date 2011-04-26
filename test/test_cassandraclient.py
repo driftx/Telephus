@@ -267,10 +267,21 @@ class CassandraClientTest(unittest.TestCase):
             memtable_operations_in_millions=1.1671875,
             replicate_on_write=False,
             merge_shards_chance=0.10000000000000001,
+            row_cache_provider=None,
+            key_alias=None,
         )
+        post_07_fields = ['replicate_on_write', 'merge_shards_chance',
+                          'key_validation_class', 'row_cache_provider', 'key_alias']
+
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
         cfdef2 = [c for c in ksdef.cf_defs if c.name == T_CF][0]
+
+        for field in post_07_fields:
+            # Most of these are ignored in 0.7, so we can't reliably compare them
+            setattr(cfdef, field, None)
+            setattr(cfdef2, field, None)
+
         # we don't know the id ahead of time. copy the new one so the equality
         # comparison won't fail
         cfdef.id = cfdef2.id
