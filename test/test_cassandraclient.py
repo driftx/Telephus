@@ -3,7 +3,7 @@ from twisted.python.failure import Failure
 from twisted.internet import defer, reactor, error
 from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
-from telephus.cassandra import constants
+from telephus import translate
 from telephus.cassandra.ttypes import *
 import os
 
@@ -346,7 +346,7 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_api_match(self):
-        for version in [constants.CASSANDRA_07, constants.CASSANDRA_08, None]:
+        for version in [translate.CASSANDRA_07_VERSION, translate.CASSANDRA_08_VERSION, None]:
             cmanager = ManagedCassandraClientFactory(api_version=version)
             client = CassandraClient(cmanager)
             d = cmanager.deferred

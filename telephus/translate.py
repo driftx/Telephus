@@ -1,6 +1,10 @@
-from telephus.cassandra.constants import *
+from telephus.cassandra.c07.constants import VERSION as CASSANDRA_07_VERSION
+from telephus.cassandra.c08.constants import VERSION as CASSANDRA_08_VERSION
 
-__all__ = ['APIMismatch', 'getAPIVersion', 'translateArgs', 'postProcess']
+supported_versions = (
+    ('0.7', CASSANDRA_07_VERSION),
+    ('0.8', CASSANDRA_08_VERSION),
+)
 
 class APIMismatch(Exception):
     pass
@@ -14,10 +18,10 @@ def getAPIVersion(remoteversion):
     number should not affect anything noticeable.
     """
     r_major, r_minor, r_patch = map(int, remoteversion.split('.'))
-    for version in [CASSANDRA_08, CASSANDRA_07]:
-        o_major, o_minor, o_patch = map(int, version.split('.'))
+    for cassversion, thriftversion in supported_versions:
+        o_major, o_minor, o_patch = map(int, thriftversion.split('.'))
         if (r_major == o_major) and (r_minor >= o_minor):
-            return version
+            return thriftversion
     msg = 'Cassandra API version %s is not compatible with telephus' % ver
     raise APIMismatch(msg)
 
@@ -25,7 +29,7 @@ def translateArgs(request, api_version):
     args = request.args
     if request.method == 'system_add_keyspace' or \
        request.method == 'system_update_keyspace':
-        if api_version == CASSANDRA_07:
+        if api_version == CASSANDRA_07_VERSION:
             args = (args[0].to07(),)
         else:
             args = (args[0].to08(),)

@@ -58,9 +58,9 @@ from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
 from telephus.cassandra.c08 import Cassandra as Cassandra08
 from telephus.cassandra.ttypes import *
-from telephus.cassandra.constants import *
 from telephus.client import CassandraClient
-from translate import *
+from telephus.translate import (getAPIVersion, translateArgs,
+                                postProcess)
 
 noop = lambda *a, **kw: None
 

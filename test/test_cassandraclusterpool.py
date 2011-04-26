@@ -9,7 +9,7 @@ from twisted.internet import defer, reactor
 from twisted.python import log
 from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
                            CassandraPoolParticipantClient, TTransport)
-from telephus.cassandra import constants
+from telephus import translate
 from telephus.cassandra.c08 import Cassandra
 from telephus.cassandra.ttypes import *
 
@@ -811,7 +811,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         starttime = time()
         with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes,
-                                   api_version=constants.CASSANDRA_08):
+                                   api_version=translate.CASSANDRA_08_VERSION):
             yield self.make_standard_cfs(ksname)
             yield self.insert_dumb_rows(ksname, numkeys=num_keys)
 

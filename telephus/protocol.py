@@ -4,10 +4,9 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
 from twisted.python import failure
+from telephus import translate
 from telephus.cassandra.ttypes import *
-from telephus.cassandra.constants import *
-import telephus.cassandra.c08.Cassandra as Cassandra
-import telephus.translate as translate
+from telephus.cassandra.c08 import Cassandra
 from sys import exc_info
 
 class ClientBusy(Exception):
