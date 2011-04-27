@@ -46,7 +46,7 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             d.addCallback(lambda _: self.client.describe_version())
             d.addCallback(translate.getAPIVersion)
             def set_version(ver):
-                self.version = ver
+                self.api_version = ver
             d.addCallback(set_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
