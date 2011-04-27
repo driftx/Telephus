@@ -154,6 +154,14 @@ class CassandraClient(object):
         req = ManagedThriftRequest('insert', key, cp, Column(column, value, timestamp, ttl), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
+    @requirekwargs('key', 'column_family', 'value', 'column')
+    def add(self, key=None, column_family=None, value=None, column=None, super_column=None,
+            consistency=None, retries=None):
+        cp = self._getparent(column_family, super_column)
+        consistency = consistency or self.consistency
+        req = ManagedThriftRequest('add', key, cp, CounterColumn(column, value), consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
     @requirekwargs('key', 'column_family')
     def remove(self, key=None, column_family=None, column=None, super_column=None,
                timestamp=None, consistency=None, retries=None):
@@ -161,6 +169,14 @@ class CassandraClient(object):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('remove', key, cp, timestamp, self.consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
+    @requirekwargs('key', 'column_family', 'column')
+    def remove_counter(self, key=None, column_family=None, column=None, super_column=None,
+                       consistency=None, retries=None):
+        cp = self._getpath(column_family, column, super_column)
+        consistency = consistency or self.consistency
+        req = ManagedThriftRequest('remove_counter', key, cp, self.consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'mapping')
@@ -208,6 +224,11 @@ class CassandraClient(object):
                         muts.append(c)
                 mutmap[key][cf] = muts
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
+    @requirekwargs('query')
+    def execute_cql_query(self, query=None, compression=Compression.GZIP, retries=None):
+        req = ManagedThriftRequest('execute_cql_query', query, compression)
         return self.manager.pushRequest(req, retries=retries)
 
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
