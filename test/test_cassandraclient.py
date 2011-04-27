@@ -5,6 +5,7 @@ from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
 from telephus import translate
 from telephus.cassandra.ttypes import *
+from telephus.translate import getAPIVersion, CASSANDRA_08_VERSION
 import os
 import zlib
 
@@ -37,6 +38,9 @@ class CassandraClientTest(unittest.TestCase):
             reactor.connectTCP(HOST, PORT, self.cmanager)
         yield self.cmanager.deferred
 
+        remote_ver = yield self.client.describe_version()
+        self.version = getAPIVersion(remote_ver)
+
         self.my_keyspace = KsDef(
             name=KEYSPACE,
             strategy_class='org.apache.cassandra.locator.SimpleStrategy',
@@ -66,6 +70,10 @@ class CassandraClientTest(unittest.TestCase):
                     ],
                     default_validation_class='org.apache.cassandra.db.marshal.BytesType'
                 ),
+            ]
+        )
+        if self.version == CASSANDRA_08_VERSION:
+            self.my_keyspace.cf_defs.extend([
                 CfDef(
                     keyspace=KEYSPACE,
                     name=COUNTER_CF,
@@ -78,8 +86,8 @@ class CassandraClientTest(unittest.TestCase):
                     column_type='Super',
                     default_validation_class='org.apache.cassandra.db.marshal.CounterColumnType'
                 ),
-            ]
-        )
+            ])
+
         yield self.client.system_add_keyspace(self.my_keyspace)
         yield self.client.set_keyspace(KEYSPACE)
 
@@ -193,6 +201,9 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_counter_add(self):
+        if self.version != CASSANDRA_08_VERSION:
+            raise unittest.SkipTest('Counters are not supported in 0.7')
+
         # test standard column counter
         yield self.client.add('test', COUNTER_CF, 1, column='col')
         res = yield self.client.get('test', COUNTER_CF, column='col')
@@ -213,6 +224,9 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_counter_remove(self):
+        if self.version != CASSANDRA_08_VERSION:
+            raise unittest.SkipTest('Counters are not supported in 0.7')
+
         # test standard column counter
         yield self.client.add('test', COUNTER_CF, 1, column='col')
         res = yield self.client.get('test', COUNTER_CF, column='col')
@@ -235,6 +249,9 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_cql(self):
+        if self.version != CASSANDRA_08_VERSION:
+            raise unittest.SkipTest('CQL is not supported in 0.7')
+
         yield self.client.insert('test', CF, 'testval', column='col1')
         res = yield self.client.get('test', CF, column='col1')
         self.assertEquals(res.column.value, 'testval')
