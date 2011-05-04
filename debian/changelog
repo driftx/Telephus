@@ -1,3 +1,18 @@
+python-telephus (0.8.0~beta1) unstable; urgency=low
+
+  * Tyler Hobbs <tyler@datastax.com>:
+    + Compatible with Cassandra 0.7 and 0.8
+    + Add Counter and CQL support
+    + Set self.api_version, not self.version in Protocol
+    + Replace explicit ttypes assignments with * import
+    + Don't compare post-0.7 CfDef attributes in tests
+    + Skip 0.8-specific tests if not running against 0.8
+  * Nick Bailey <nick@riptano.com>:
+    + Fix tests for 0.8
+    + Update thrift definitions for 0.8
+
+ -- paul cannon <paul@riptano.com>  Wed, 04 May 2011 15:21:31 -0500
+
 python-telephus (0.7.1) unstable; urgency=low
 
   * Tyler Hobbs <tyler@datastax.com>:
