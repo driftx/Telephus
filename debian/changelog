@@ -1,3 +1,9 @@
+python-telephus (0.8.0~beta1.natty) unstable; urgency=low
+
+  * Build to support natty/python2.7
+
+ -- Mike Bulman <mike@datastax.com>  Tue, 19 Jul 2011 09:37:22 -0500
+
 python-telephus (0.8.0~beta1) unstable; urgency=low
 
   * Tyler Hobbs <tyler@datastax.com>:
