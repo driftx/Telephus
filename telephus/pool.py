@@ -519,7 +519,7 @@ class CassandraNode:
     def __hash__(self):
         return hash((self.__class__, self.host, self.port))
 
-class CassandraClusterPool(service.Service):
+class CassandraClusterPool(service.Service, object):
     """
     Manage a pool of connections to nodes in a Cassandra cluster.
 
