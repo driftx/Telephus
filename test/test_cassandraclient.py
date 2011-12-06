@@ -5,7 +5,7 @@ from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
 from telephus import translate
 from telephus.cassandra.ttypes import *
-from telephus.translate import getAPIVersion, CASSANDRA_08_VERSION
+from telephus.translate import thrift_api_ver_to_cassandra_ver, CASSANDRA_08_VERSION
 import os
 
 CONNS = 5
@@ -38,7 +38,7 @@ class CassandraClientTest(unittest.TestCase):
         yield self.cmanager.deferred
 
         remote_ver = yield self.client.describe_version()
-        self.version = getAPIVersion(remote_ver)
+        self.version = thrift_api_ver_to_cassandra_ver(remote_ver)
 
         self.my_keyspace = KsDef(
             name=KEYSPACE,

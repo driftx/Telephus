@@ -9,7 +9,7 @@ supported_versions = (
 class APIMismatch(Exception):
     pass
 
-def getAPIVersion(remoteversion):
+def thrift_api_ver_to_cassandra_ver(remoteversion):
     """
     Try to determine if the remote thrift api version is likely to work the
     way we expect it to. A mismatch in major version number will definitely
