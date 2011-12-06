@@ -7,7 +7,6 @@ from telephus import translate
 from telephus.cassandra.ttypes import *
 from telephus.translate import getAPIVersion, CASSANDRA_08_VERSION
 import os
-import zlib
 
 CONNS = 5
 
@@ -246,24 +245,6 @@ class CassandraClientTest(unittest.TestCase):
         yield self.assertFailure(self.client.get('test', SUPERCOUNTER_CF,
                                                  column='col', super_column='scol'),
                                  NotFoundException)
-
-    @defer.inlineCallbacks
-    def test_cql(self):
-        if self.version != CASSANDRA_08_VERSION:
-            raise unittest.SkipTest('CQL is not supported in 0.7')
-
-        yield self.client.insert('test', CF, 'testval', column='col1')
-        res = yield self.client.get('test', CF, column='col1')
-        self.assertEquals(res.column.value, 'testval')
-
-        query = 'SELECT * from %s where KEY = %s' % (CF, 'test'.encode('hex'))
-        uncompressed_result = yield self.client.execute_cql_query(query, Compression.NONE)
-        self.assertEquals(uncompressed_result.rows[0].columns[0].name, 'col1')
-        self.assertEquals(uncompressed_result.rows[0].columns[0].value, 'testval')
-
-        compressed_query = zlib.compress(query)
-        compressed_result = yield self.client.execute_cql_query(compressed_query, Compression.GZIP)
-        self.assertEquals(uncompressed_result, compressed_result)
 
     def sleep(self, secs):
         d = defer.Deferred()
