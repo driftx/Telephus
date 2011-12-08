@@ -428,12 +428,29 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_api_match(self):
-        for version in [translate.CASSANDRA_07_VERSION, translate.CASSANDRA_08_VERSION, None]:
-            cmanager = ManagedCassandraClientFactory(api_version=version)
-            client = CassandraClient(cmanager)
-            d = cmanager.deferred
-            conn = reactor.connectTCP(HOST, PORT, cmanager)
-            yield d
-            # do something innocuous, make sure connection is good
-            yield client.describe_schema_versions()
-            yield cmanager.shutdown()
+        cmanager = ManagedCassandraClientFactory(require_api_version=None)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield d
+        yield client.describe_schema_versions()
+        api_ver = cmanager._protos[0].api_version
+        yield cmanager.shutdown()
+
+        # try with the right version explicitly required
+        cmanager = ManagedCassandraClientFactory(require_api_version=api_ver)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield d
+        yield client.describe_schema_versions()
+        yield cmanager.shutdown()
+
+        # try with a mismatching version explicitly required
+        bad_ver = [v for (_, v) in translate.supported_versions if v != api_ver][0]
+        cmanager = ManagedCassandraClientFactory(require_api_version=bad_ver)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield self.assertFailure(d, translate.APIMismatch)
+        yield cmanager.shutdown()
