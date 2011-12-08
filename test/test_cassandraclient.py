@@ -422,7 +422,7 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
         cmanager = ManagedCassandraClientFactory()
         client = CassandraClient(cmanager)
         d = cmanager.deferred
-        reactor.connectTCP('nonexistent-host.000-', PORT, cmanager)
+        reactor.connectTCP('nonexistent.example.com', PORT, cmanager)
         yield self.assertFailure(d, error.DNSLookupError)
         cmanager.shutdown()
 
