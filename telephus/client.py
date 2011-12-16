@@ -160,7 +160,7 @@ class CassandraClient(object):
         cp = self._getpath(column_family, column, super_column)
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('remove', key, cp, timestamp, self.consistency)
+        req = ManagedThriftRequest('remove', key, cp, timestamp, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'mapping')
