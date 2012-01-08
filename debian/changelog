@@ -1,3 +1,15 @@
+python-telephus (1.0.0~beta1) unstable; urgency=low
+
+  * paul cannon <paul@datastax.com>:
+    + provide require_api_version kwarg, not api_version
+    + rip out CQL support
+    + fix setting consistency on CCP instances
+    + allow deb to work with python2.7
+  * Nick Bailey <nickmbailey@gmail.com>:
+    + Update thrift definitions for optional rpc_endpoints attribute
+
+ -- paul cannon <paul@datastax.com>  Sat, 07 Jan 2012 23:27:12 -0600
+
 python-telephus (0.8.0~beta1) unstable; urgency=low
 
   * Tyler Hobbs <tyler@datastax.com>:
