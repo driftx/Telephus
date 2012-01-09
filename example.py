@@ -1,8 +1,7 @@
 #!/usr/bin/python
 from telephus.protocol import ManagedCassandraClientFactory
 from telephus.client import CassandraClient
-from telephus.cassandra.ttypes import (ColumnPath, ColumnParent, Column,
-                                       SuperColumn, Compression)
+from telephus.cassandra.ttypes import ColumnPath, ColumnParent, Column, SuperColumn
 from twisted.internet import defer
 
 HOST = 'localhost'
@@ -47,10 +46,6 @@ def dostuff(client):
     res = yield client.get(key='test', column_family=SUPERCOUNT_CF,
                            column='testcounter', super_column='testsuper')
     print 'get super counter value', res
-
-    res = yield client.execute_cql_query("SELECT * FROM %s WHERE KEY = %s" % (CF, 'test'.encode('hex')),
-                                         compression=Compression.NONE)
-    print 'execute_cql_query', res
 
     # batch insert will figure out if you're trying a CF or SCF
     # from the data structure

@@ -40,13 +40,16 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             .addCallbacks(self.setupComplete, self.setupFailed)
 
     def setupConnection(self):
-        d = defer.succeed(True)
-        if self.api_version == None:
-            d.addCallback(lambda _: self.client.describe_version())
-            d.addCallback(translate.getAPIVersion)
-            def set_version(ver):
-                self.api_version = ver
-            d.addCallback(set_version)
+        d = self.client.describe_version()
+        def check_version(thrift_ver):
+            cver = translate.thrift_api_ver_to_cassandra_ver(thrift_ver)
+            if self.api_version is None:
+                self.api_version = cver
+            elif self.api_version != cver:
+                raise APIMismatch("%s is exposing thrift protocol version %s -> "
+                                  "Cassandra version %s, but %s was expected"
+                                  % (self.transport.getPeer(), thrift_ver, cver, self.api_version))
+        d.addCallback(check_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
         return d
@@ -105,7 +108,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, keyspace=None, retries=0, credentials={}, api_version=None):
+    def __init__(self, keyspace=None, retries=0, credentials={}, require_api_version=None):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
@@ -116,7 +119,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.credentials = credentials
         if credentials:
             self.protocol = AuthenticatedThriftClientProtocol
-        self.api_version = api_version
+        self.require_api_version = require_api_version
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -146,11 +149,11 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             p = self.protocol(self.keyspace,
                               self.credentials,
                               self.thriftFactory(),
-                              api_version=self.api_version)
+                              api_version=self.require_api_version)
         else:
             p = self.protocol(self.thriftFactory(),
                               keyspace=self.keyspace,
-                              api_version=self.api_version)
+                              api_version=self.require_api_version)
         p.factory = self
         return p
 

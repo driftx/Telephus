@@ -226,11 +226,6 @@ class CassandraClient(object):
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
-    @requirekwargs('query')
-    def execute_cql_query(self, query=None, compression=Compression.GZIP, retries=None):
-        req = ManagedThriftRequest('execute_cql_query', query, compression)
-        return self.manager.pushRequest(req, retries=retries)
-
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
         if isinstance(mapping, list):
             return mapping

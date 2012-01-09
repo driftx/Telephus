@@ -59,7 +59,7 @@ from telephus.protocol import (ManagedThriftRequest, ClientBusy,
 from telephus.cassandra.c08 import Cassandra as Cassandra08
 from telephus.cassandra.ttypes import *
 from telephus.client import CassandraClient
-from telephus.translate import (getAPIVersion, translateArgs,
+from telephus.translate import (thrift_api_ver_to_cassandra_ver, translateArgs,
                                 postProcess)
 
 noop = lambda *a, **kw: None
@@ -214,13 +214,16 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         errbacked if something goes wrong.
         """
 
-        d = defer.succeed(0)
-        if self.api_version is None:
-            d.addCallback(lambda _: self.my_describe_version())
-            d.addCallback(getAPIVersion)
-            def set_version(ver):
-                self.version = ver
-            d.addCallback(set_version)
+        d = self.my_describe_version()
+        def check_version(thrift_ver):
+            cassver = thrift_api_ver_to_cassandra_ver(thrift_ver)
+            if self.api_version is None:
+                self.api_version = cassver
+            elif self.api_version != cassver:
+                raise APIMismatch("%s is exposing thrift protocol version %s -> "
+                                  "Cassandra version %s, but %s was expected"
+                                  % (self.node, thrift_ver, cassver, self.api_version))
+        d.addCallback(check_version)
         if creds is not None:
             d.addCallback(lambda _: self.my_login(creds))
         if keyspace is not None:
@@ -519,7 +522,7 @@ class CassandraNode:
     def __hash__(self):
         return hash((self.__class__, self.host, self.port))
 
-class CassandraClusterPool(service.Service):
+class CassandraClusterPool(service.Service, object):
     """
     Manage a pool of connections to nodes in a Cassandra cluster.
 
@@ -594,7 +597,7 @@ class CassandraClusterPool(service.Service):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None, api_version=None):
+                 log_cb=log.msg, reactor=None, require_api_version=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -638,10 +641,15 @@ class CassandraClusterPool(service.Service):
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
 
-        @param api_version: Whether the thrift API version number should be
-            checked against the one Telephus understands upon originating any
-            connection. If the versions are not compatible, the connection to
-            that node will be aborted. Default: no
+        @param require_api_version: If not None, Telephus will require that
+            all connections conform to the API for the given Cassandra version.
+            Possible values are "0.7", "0.8", "1.0", etc.
+
+            If None, Telephus will consider all supported API versions to be
+            acceptable.
+
+            If the api version reported by a remote node is not compatible, the
+            connection to that node will be aborted. Default: None
         """
 
         self.seed_list = list(seed_list)
@@ -657,7 +665,7 @@ class CassandraClusterPool(service.Service):
         self.keyspace = keyspace
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
-        self.api_version = None
+        self.require_api_version = require_api_version
         self.future_fill_pool = None
         self.removed_nodes = set()
         self._client_instance = CassandraClient(self)
@@ -940,7 +948,7 @@ class CassandraClusterPool(service.Service):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self, self.api_version)
+        f = self.conn_factory(node, self, self.require_api_version)
         bindaddr=self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)

@@ -5,9 +5,8 @@ from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
 from telephus import translate
 from telephus.cassandra.ttypes import *
-from telephus.translate import getAPIVersion, CASSANDRA_08_VERSION
+from telephus.translate import thrift_api_ver_to_cassandra_ver, CASSANDRA_08_VERSION
 import os
-import zlib
 
 CONNS = 5
 
@@ -39,7 +38,7 @@ class CassandraClientTest(unittest.TestCase):
         yield self.cmanager.deferred
 
         remote_ver = yield self.client.describe_version()
-        self.version = getAPIVersion(remote_ver)
+        self.version = thrift_api_ver_to_cassandra_ver(remote_ver)
 
         self.my_keyspace = KsDef(
             name=KEYSPACE,
@@ -247,24 +246,6 @@ class CassandraClientTest(unittest.TestCase):
                                                  column='col', super_column='scol'),
                                  NotFoundException)
 
-    @defer.inlineCallbacks
-    def test_cql(self):
-        if self.version != CASSANDRA_08_VERSION:
-            raise unittest.SkipTest('CQL is not supported in 0.7')
-
-        yield self.client.insert('test', CF, 'testval', column='col1')
-        res = yield self.client.get('test', CF, column='col1')
-        self.assertEquals(res.column.value, 'testval')
-
-        query = 'SELECT * from %s where KEY = %s' % (CF, 'test'.encode('hex'))
-        uncompressed_result = yield self.client.execute_cql_query(query, Compression.NONE)
-        self.assertEquals(uncompressed_result.rows[0].columns[0].name, 'col1')
-        self.assertEquals(uncompressed_result.rows[0].columns[0].value, 'testval')
-
-        compressed_query = zlib.compress(query)
-        compressed_result = yield self.client.execute_cql_query(compressed_query, Compression.GZIP)
-        self.assertEquals(uncompressed_result, compressed_result)
-
     def sleep(self, secs):
         d = defer.Deferred()
         reactor.callLater(secs, d.callback, None)
@@ -362,6 +343,8 @@ class CassandraClientTest(unittest.TestCase):
         )
         post_07_fields = ['replicate_on_write', 'merge_shards_chance',
                           'key_validation_class', 'row_cache_provider', 'key_alias']
+        post_08_fields = ['memtable_throughput_in_mb', 'memtable_flush_after_mins', 'memtable_operations_in_millions']
+                         
 
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
@@ -369,6 +352,11 @@ class CassandraClientTest(unittest.TestCase):
 
         for field in post_07_fields:
             # Most of these are ignored in 0.7, so we can't reliably compare them
+            setattr(cfdef, field, None)
+            setattr(cfdef2, field, None)
+
+        for field in post_08_fields:
+            # These fields change from 0.8 to 1.0
             setattr(cfdef, field, None)
             setattr(cfdef2, field, None)
 
@@ -441,18 +429,35 @@ class ManagedCassandraClientFactoryTest(unittest.TestCase):
         cmanager = ManagedCassandraClientFactory()
         client = CassandraClient(cmanager)
         d = cmanager.deferred
-        reactor.connectTCP('nonexistent-host.000-', PORT, cmanager)
+        reactor.connectTCP('nonexistent.example.com', PORT, cmanager)
         yield self.assertFailure(d, error.DNSLookupError)
         cmanager.shutdown()
 
     @defer.inlineCallbacks
     def test_api_match(self):
-        for version in [translate.CASSANDRA_07_VERSION, translate.CASSANDRA_08_VERSION, None]:
-            cmanager = ManagedCassandraClientFactory(api_version=version)
-            client = CassandraClient(cmanager)
-            d = cmanager.deferred
-            conn = reactor.connectTCP(HOST, PORT, cmanager)
-            yield d
-            # do something innocuous, make sure connection is good
-            yield client.describe_schema_versions()
-            yield cmanager.shutdown()
+        cmanager = ManagedCassandraClientFactory(require_api_version=None)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield d
+        yield client.describe_schema_versions()
+        api_ver = cmanager._protos[0].api_version
+        yield cmanager.shutdown()
+
+        # try with the right version explicitly required
+        cmanager = ManagedCassandraClientFactory(require_api_version=api_ver)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield d
+        yield client.describe_schema_versions()
+        yield cmanager.shutdown()
+
+        # try with a mismatching version explicitly required
+        bad_ver = [v for (_, v) in translate.supported_versions if v != api_ver][0]
+        cmanager = ManagedCassandraClientFactory(require_api_version=bad_ver)
+        client = CassandraClient(cmanager)
+        d = cmanager.deferred
+        conn = reactor.connectTCP(HOST, PORT, cmanager)
+        yield self.assertFailure(d, translate.APIMismatch)
+        yield cmanager.shutdown()
