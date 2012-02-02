@@ -344,6 +344,7 @@ class CassandraClientTest(unittest.TestCase):
         post_07_fields = ['replicate_on_write', 'merge_shards_chance',
                           'key_validation_class', 'row_cache_provider', 'key_alias']
         post_08_fields = ['memtable_throughput_in_mb', 'memtable_flush_after_mins', 'memtable_operations_in_millions']
+        post_10_fields = ['key_cache_save_period_in_seconds', 'row_cache_save_period_in_seconds']
                          
 
         yield self.client.system_add_column_family(cfdef)
@@ -357,6 +358,11 @@ class CassandraClientTest(unittest.TestCase):
 
         for field in post_08_fields:
             # These fields change from 0.8 to 1.0
+            setattr(cfdef, field, None)
+            setattr(cfdef2, field, None)
+
+        for field in post_10_fields:
+            # These fields change from 1.0 to 1.1
             setattr(cfdef, field, None)
             setattr(cfdef2, field, None)
 
