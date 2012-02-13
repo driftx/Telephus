@@ -226,7 +226,19 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEquals(res.counter_column.value, 2)        
         res = yield self.client.get('keyB', COUNTER_CF, column='col2B')
         self.assertEquals(res.counter_column.value, 3)    
-
+        mapping = {
+            "keyA":{"col1A":1, "col2A":1},
+            "keyB":{"col1B":1, "col2B":1}}
+        yield self.client.batch_multikey_add(COUNTER_CF, mapping) 
+        res = yield self.client.get('keyA', COUNTER_CF, column='col1A')
+        self.assertEquals(res.counter_column.value, 2)        
+        res = yield self.client.get('keyA', COUNTER_CF, column='col2A')
+        self.assertEquals(res.counter_column.value, 6)    
+        res = yield self.client.get('keyB', COUNTER_CF, column='col1B')
+        self.assertEquals(res.counter_column.value, 3)        
+        res = yield self.client.get('keyB', COUNTER_CF, column='col2B')
+        self.assertEquals(res.counter_column.value, 4)  
+                
     @defer.inlineCallbacks
     def test_counter_batch_add(self):
         if self.version != CASSANDRA_08_VERSION:
@@ -237,6 +249,12 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEquals(res.counter_column.value, 1)        
         res = yield self.client.get('test', COUNTER_CF, column='col2')
         self.assertEquals(res.counter_column.value, 5)    
+        mapping = {"col1":1, "col2":1}
+        yield self.client.batch_add('test', COUNTER_CF, mapping) 
+        res = yield self.client.get('test', COUNTER_CF, column='col1')
+        self.assertEquals(res.counter_column.value, 2)        
+        res = yield self.client.get('test', COUNTER_CF, column='col2')
+        self.assertEquals(res.counter_column.value, 6)  
 
     @defer.inlineCallbacks
     def test_counter_add(self):

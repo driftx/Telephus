@@ -219,6 +219,17 @@ class CassandraClient(object):
                                  retries=retries)
 
     @requirekwargs('cfmap')
+    def batch_remove_rows(self, cfmap=None, consistency=None, timestamp=None, retries=None):
+        timestamp = timestamp or self._time()
+        consistency = consistency or self.consistency
+        mutmap = defaultdict(dict)
+        for cf, keys in cfmap.iteritems():
+            for key in keys:
+                mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp))]
+        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
+    @requirekwargs('cfmap')
     def batch_remove(self, cfmap=None, start='', finish='', count=100, names=None,
                      reverse=False, consistency=None, timestamp=None, supercolumn=None,
                      retries=None):
