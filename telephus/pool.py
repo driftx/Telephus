@@ -285,7 +285,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def execute(self, req, keyspace=None):
         if self.my_proto is None:
-            return defer.errback(error.ConnectionClosed(
+            return defer.fail(error.ConnectionClosed(
                                     'Lost connection before %s request could be made'
                                     % (req.method,)))
         method = getattr(self.my_proto.client, req.method, None)
