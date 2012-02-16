@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from setuptools import setup
+from distutils.core import setup
 setup(
     name='telephus',
     version='1.0.0',
