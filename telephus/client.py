@@ -179,6 +179,34 @@ class CassandraClient(object):
         req = ManagedThriftRequest('remove_counter', key, cp, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
+    @requirekwargs('column_family', 'mapping')
+    def batch_multikey_add(self, column_family=None, mapping=None, consistency=None, 
+                           retries=None):     
+        consistency = consistency or self.consistency
+        mutmap = dict([(k, {column_family: self._mk_counter_cols_or_supers(v)}) 
+            for k, v in mapping.items()])
+        return self.batch_mutate_counters(mutmap, consistency=consistency, retries=retries)
+
+    @requirekwargs('key', 'column_family', 'mapping')
+    def batch_add(self, key=None, column_family=None, mapping=None, consistency=None, 
+                  retries=None):
+        consistency = consistency or self.consistency
+        mutmap = {key: {column_family: self._mk_counter_cols_or_supers(mapping)}}
+        return self.batch_mutate_counters(mutmap, consistency=consistency, retries=retries)
+
+    @requirekwargs('column_family', 'mapping')
+    def batch_multikey_insert(self, column_family=None, mapping=None, timestamp=None,
+                              consistency=None, retries=None, ttl=None):    
+        for value in mapping.values():
+            if isinstance(value, list) and timestamp is not None:
+                raise RuntimeError('Timestamp cannot be specified with a list of Mutations')           
+        timestamp = timestamp or self._time()
+        consistency = consistency or self.consistency        
+        mutmap = dict([(k, {column_family: self._mk_cols_or_supers(v, timestamp, ttl)}) 
+            for k, v in mapping.items()])
+        return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency,
+                                 retries=retries)
+
     @requirekwargs('key', 'column_family', 'mapping')
     def batch_insert(self, key=None, column_family=None, mapping=None, timestamp=None,
                      consistency=None, retries=None, ttl=None):
@@ -191,6 +219,17 @@ class CassandraClient(object):
                                  retries=retries)
 
     @requirekwargs('cfmap')
+    def batch_remove_rows(self, cfmap=None, consistency=None, timestamp=None, retries=None):
+        timestamp = timestamp or self._time()
+        consistency = consistency or self.consistency
+        mutmap = defaultdict(dict)
+        for cf, keys in cfmap.iteritems():
+            for key in keys:
+                mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp))]
+        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
+    @requirekwargs('cfmap')
     def batch_remove(self, cfmap=None, start='', finish='', count=100, names=None,
                      reverse=False, consistency=None, timestamp=None, supercolumn=None,
                      retries=None):
@@ -201,6 +240,25 @@ class CassandraClient(object):
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
                 mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp, supercolumn, pred))]
+        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+        return self.manager.pushRequest(req, retries=retries)
+
+    @requirekwargs('mutationmap')
+    def batch_mutate_counters(self, mutationmap=None, consistency=None, retries=None):
+        consistency = consistency or self.consistency
+        mutmap = defaultdict(dict)
+        for key, cfmap in mutationmap.iteritems():
+            for cf, colmap in cfmap.iteritems():
+                cols_or_supers = self._mk_counter_cols_or_supers(colmap)
+                muts = []
+                for c in cols_or_supers:
+                    if isinstance(c, CounterSuperColumn):
+                        muts.append(Mutation(ColumnOrSuperColumn(counter_super_column=c)))
+                    elif isinstance(c, CounterColumn):
+                        muts.append(Mutation(ColumnOrSuperColumn(counter_column=c)))
+                    else:
+                        muts.append(c)
+                mutmap[key][cf] = muts
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
@@ -225,6 +283,25 @@ class CassandraClient(object):
                 mutmap[key][cf] = muts
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
+
+    def _mk_counter_cols_or_supers(self, mapping):
+        if isinstance(mapping, list):
+            return mapping
+        colsorsupers = []
+        if isinstance(mapping, dict):
+            first = mapping.keys()[0]
+            if isinstance(mapping[first], dict):
+                for name in mapping:
+                    cols = []
+                    for col,val in mapping[name].iteritems():
+                        cols.append(CounterColumn(col, val))
+                    colsorsupers.append(CounterSuperColumn(name=name, columns=cols))
+            else:
+                for col, val in mapping.iteritems():
+                    colsorsupers.append(CounterColumn(col, val))
+        else:
+            raise TypeError('dict (of dicts) or list of CounterColumn/CounterSuperColumn expected')
+        return colsorsupers
 
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
         if isinstance(mapping, list):

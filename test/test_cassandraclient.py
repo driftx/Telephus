@@ -115,6 +115,18 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEqual(res.column.value, 'superval2')
 
     @defer.inlineCallbacks
+    def test_batch_multikey_insert_get_slice_and_count(self):
+        mapping = {'testA':{COLUMN: 'column1A', COLUMN2: 'column2A'}, 
+                   'testB':{COLUMN: 'column1B', COLUMN2: 'column2B'}}
+        yield self.client.batch_multikey_insert(CF, mapping)
+        res = yield self.client.get_slice('testA', CF, names=(COLUMN, COLUMN2))
+        self.assertEqual(res[0].column.value, 'column1A')
+        self.assertEqual(res[1].column.value, 'column2A')        
+        res = yield self.client.get_slice('testB', CF, names=(COLUMN, COLUMN2))
+        self.assertEqual(res[0].column.value, 'column1B')
+        self.assertEqual(res[1].column.value, 'column2B') 
+                
+    @defer.inlineCallbacks
     def test_batch_insert_get_slice_and_count(self):
         yield self.client.batch_insert('test', CF,
                                        {COLUMN: 'test', COLUMN2: 'test2'})
@@ -197,6 +209,52 @@ class CassandraClientTest(unittest.TestCase):
         expressions = [IndexExpression('col1', IndexOperator.EQ, 'two')]
         res = yield self.client.get_indexed_slices(IDX_CF, expressions, start_key='')
         self.assertEquals(res[0].columns[0].column.value,'two')
+
+    @defer.inlineCallbacks
+    def test_counter_batch_multikey_add(self):
+        if self.version != CASSANDRA_08_VERSION:
+            raise unittest.SkipTest('Counters are not supported in 0.7')
+        mapping = {
+            "keyA":{"col1A":1, "col2A":5},
+            "keyB":{"col1B":2, "col2B":3}}
+        yield self.client.batch_multikey_add(COUNTER_CF, mapping) 
+        res = yield self.client.get('keyA', COUNTER_CF, column='col1A')
+        self.assertEquals(res.counter_column.value, 1)        
+        res = yield self.client.get('keyA', COUNTER_CF, column='col2A')
+        self.assertEquals(res.counter_column.value, 5)    
+        res = yield self.client.get('keyB', COUNTER_CF, column='col1B')
+        self.assertEquals(res.counter_column.value, 2)        
+        res = yield self.client.get('keyB', COUNTER_CF, column='col2B')
+        self.assertEquals(res.counter_column.value, 3)    
+        mapping = {
+            "keyA":{"col1A":1, "col2A":1},
+            "keyB":{"col1B":1, "col2B":1}}
+        yield self.client.batch_multikey_add(COUNTER_CF, mapping) 
+        res = yield self.client.get('keyA', COUNTER_CF, column='col1A')
+        self.assertEquals(res.counter_column.value, 2)        
+        res = yield self.client.get('keyA', COUNTER_CF, column='col2A')
+        self.assertEquals(res.counter_column.value, 6)    
+        res = yield self.client.get('keyB', COUNTER_CF, column='col1B')
+        self.assertEquals(res.counter_column.value, 3)        
+        res = yield self.client.get('keyB', COUNTER_CF, column='col2B')
+        self.assertEquals(res.counter_column.value, 4)  
+                
+    @defer.inlineCallbacks
+    def test_counter_batch_add(self):
+        if self.version != CASSANDRA_08_VERSION:
+            raise unittest.SkipTest('Counters are not supported in 0.7')
+        mapping = {"col1":1, "col2":5}
+        yield self.client.batch_add('test', COUNTER_CF, mapping) 
+        res = yield self.client.get('test', COUNTER_CF, column='col1')
+        self.assertEquals(res.counter_column.value, 1)        
+        res = yield self.client.get('test', COUNTER_CF, column='col2')
+        self.assertEquals(res.counter_column.value, 5)    
+        mapping = {"col1":1, "col2":1}
+        yield self.client.batch_add('test', COUNTER_CF, mapping) 
+        res = yield self.client.get('test', COUNTER_CF, column='col1')
+        self.assertEquals(res.counter_column.value, 2)        
+        res = yield self.client.get('test', COUNTER_CF, column='col2')
+        self.assertEquals(res.counter_column.value, 6)  
 
     @defer.inlineCallbacks
     def test_counter_add(self):
