@@ -115,6 +115,15 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEqual(res.column.value, 'superval2')
 
     @defer.inlineCallbacks
+    def test_batch_remove_rows(self):    
+        yield self.client.insert('test', CF, 'testval', column=COLUMN)
+        yield self.client.insert('test2', CF, 'testval2', column=COLUMN)
+        yield self.client.batch_remove_rows({CF:["test", "test2"]})
+        res = yield self.client.multiget(['test', 'test2'], CF, column=COLUMN)
+        self.assertEqual(len(res['test']), 0)
+        self.assertEqual(len(res['test2']), 0)
+
+    @defer.inlineCallbacks
     def test_batch_multikey_insert_get_slice_and_count(self):
         mapping = {'testA':{COLUMN: 'column1A', COLUMN2: 'column2A'}, 
                    'testB':{COLUMN: 'column1B', COLUMN2: 'column2B'}}
