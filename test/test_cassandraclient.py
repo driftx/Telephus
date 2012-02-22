@@ -318,58 +318,33 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_column_family_manipulation(self):
-        cfdef = CfDef(KEYSPACE, T_CF,
-            column_type='Standard',
-            comparator_type='org.apache.cassandra.db.marshal.BytesType',
-            comment='foo',
-            row_cache_size=0.0,
-            key_cache_size=200000.0,
-            read_repair_chance=1.0,
-            column_metadata=[],
-            gc_grace_seconds=86400,
-            default_validation_class='org.apache.cassandra.db.marshal.BytesType',
-            key_validation_class='org.apache.cassandra.db.marshal.BytesType',
-            min_compaction_threshold=5,
-            max_compaction_threshold=31,
-            row_cache_save_period_in_seconds=0,
-            key_cache_save_period_in_seconds=3600,
-            memtable_flush_after_mins=60,
-            memtable_throughput_in_mb=249,
-            memtable_operations_in_millions=1.1671875,
-            replicate_on_write=False,
-            merge_shards_chance=0.10000000000000001,
-            row_cache_provider=None,
-            key_alias=None,
+        # CfDef attributes present in all supported c*/thrift-api versions
+        common_attrs = (
+            ('column_type', 'Standard'),
+            ('comparator_type', 'org.apache.cassandra.db.marshal.BytesType'),
+            ('comment', 'foo'),
+            ('read_repair_chance', 1.0),
+            ('column_metadata', []),
+            ('gc_grace_seconds', 86400),
+            ('default_validation_class', 'org.apache.cassandra.db.marshal.BytesType'),
+            ('min_compaction_threshold', 5),
+            ('max_compaction_threshold', 31),
         )
-        post_07_fields = ['replicate_on_write', 'merge_shards_chance',
-                          'key_validation_class', 'row_cache_provider', 'key_alias']
-        post_08_fields = ['memtable_throughput_in_mb', 'memtable_flush_after_mins', 'memtable_operations_in_millions']
-        post_10_fields = ['key_cache_save_period_in_seconds', 'row_cache_save_period_in_seconds']
-                         
+        cfdef = CfDef(KEYSPACE, T_CF)
+        for attr, val in common_attrs:
+            setattr(cfdef, attr, val)
 
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
-        cfdef2 = [c for c in ksdef.cf_defs if c.name == T_CF][0]
+        cfdefs = [c for c in ksdef.cf_defs if c.name == T_CF]
+        self.assertEqual(len(cfdefs), 1)
+        cfdef2 = cfdefs[0]
 
-        for field in post_07_fields:
-            # Most of these are ignored in 0.7, so we can't reliably compare them
-            setattr(cfdef, field, None)
-            setattr(cfdef2, field, None)
+        for attr, val in common_attrs:
+            val1 = getattr(cfdef, attr)
+            val2 = getattr(cfdef2, attr)
+            self.assertEqual(val1, val2, 'attribute %s mismatch: %r != %r' % (attr, val1, val2))
 
-        for field in post_08_fields:
-            # These fields change from 0.8 to 1.0
-            setattr(cfdef, field, None)
-            setattr(cfdef2, field, None)
-
-        for field in post_10_fields:
-            # These fields change from 1.0 to 1.1
-            setattr(cfdef, field, None)
-            setattr(cfdef2, field, None)
-
-        # we don't know the id ahead of time. copy the new one so the equality
-        # comparison won't fail
-        cfdef.id = cfdef2.id
-        self.assertEqual(cfdef, cfdef2)
         if DO_SYSTEM_RENAMING:
             newname = T_CF + '2'
             yield self.client.system_rename_column_family(T_CF, newname)
