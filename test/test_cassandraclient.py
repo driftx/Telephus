@@ -5,7 +5,6 @@ from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
 from telephus import translate
 from telephus.cassandra.ttypes import *
-from telephus.translate import thrift_api_ver_to_cassandra_ver, CASSANDRA_08_VERSION
 import os
 
 CONNS = 5
@@ -25,6 +24,8 @@ COLUMN = 'foo'
 COLUMN2 = 'foo2'
 SCOLUMN = 'bar'
 
+COUNTERS_SUPPORTED_API = (19, 10, 0)
+
 # until Cassandra supports these again..
 DO_SYSTEM_RENAMING = False
 
@@ -38,7 +39,7 @@ class CassandraClientTest(unittest.TestCase):
         yield self.cmanager.deferred
 
         remote_ver = yield self.client.describe_version()
-        self.version = thrift_api_ver_to_cassandra_ver(remote_ver)
+        self.version = map(int, remote_ver.split('.'))
 
         self.my_keyspace = KsDef(
             name=KEYSPACE,
@@ -71,7 +72,7 @@ class CassandraClientTest(unittest.TestCase):
                 ),
             ]
         )
-        if self.version == CASSANDRA_08_VERSION:
+        if self.version >= COUNTERS_SUPPORTED_API:
             self.my_keyspace.cf_defs.extend([
                 CfDef(
                     keyspace=KEYSPACE,
@@ -200,8 +201,8 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_counter_add(self):
-        if self.version != CASSANDRA_08_VERSION:
-            raise unittest.SkipTest('Counters are not supported in 0.7')
+        if self.version < COUNTERS_SUPPORTED_API:
+            raise unittest.SkipTest('Counters are not supported before 0.8')
 
         # test standard column counter
         yield self.client.add('test', COUNTER_CF, 1, column='col')
@@ -223,8 +224,8 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_counter_remove(self):
-        if self.version != CASSANDRA_08_VERSION:
-            raise unittest.SkipTest('Counters are not supported in 0.7')
+        if self.version < COUNTERS_SUPPORTED_API:
+            raise unittest.SkipTest('Counters are not supported before 0.8')
 
         # test standard column counter
         yield self.client.add('test', COUNTER_CF, 1, column='col')
