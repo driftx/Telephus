@@ -48,6 +48,7 @@ import socket
 from time import time
 from itertools import izip, groupby
 from warnings import warn
+from functools import partial
 from twisted.application import service
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
@@ -56,10 +57,10 @@ from thrift.transport import TTwisted, TTransport
 from thrift.protocol import TBinaryProtocol
 from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
-from telephus.cassandra.c08 import Cassandra as Cassandra08
-from telephus.cassandra.latest import ttypes
+from telephus import translate, cassandra
 from telephus.client import CassandraClient
-from telephus.translate import translateArgs, postProcess
+
+ConsistencyLevel = cassandra.latest.ttypes.ConsistencyLevel
 
 noop = lambda *a, **kw: None
 
@@ -94,8 +95,8 @@ def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
-    def __init__(self):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra08.Client,
+    def __init__(self, thrift_api):
+        TTwisted.ThriftClientProtocol.__init__(self, self.thrift_api.Cassandra.Client,
                                                self.thriftFactory())
 
     def connectionMade(self):
@@ -116,7 +117,6 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
         del self.client
 
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
-    protocol = CassandraPoolParticipantClient
     connector = None
     last_error = None
     noisy = False
@@ -130,12 +130,16 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service):
+    def __init__(self, node, service, thrift_api=None):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
+        if thrift_api is None:
+            thrift_api = cassandra.latest
+        self.thrift_api = thrift_api
+        self.protocol = partial(CassandraPoolParticipantClient, thrift_api)
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
@@ -228,9 +232,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # use of the methods on CassandraClient.
 
     def my_login(self, creds):
-        return self.execute(
-            ManagedThriftRequest('login', ttypes.AuthenticationRequest(credentials=creds))
-        )
+        req = self.thrift_api.ttypes.AuthenticationRequest(credentials=creds)
+        return self.execute(ManagedThriftRequest('login', req))
 
     def my_set_keyspace(self, keyspace):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
@@ -293,9 +296,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             if keyspace is not None and keyspace != self.keyspace:
                 d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-            args = translateArgs(req, self.api_version)
+            args = translate.translateArgs(req, self.api_version)
             d.addCallback(lambda _: method(*args))
-            d.addCallback(lambda results: postProcess(results, req.method))
+            d.addCallback(lambda results: translate.postProcess(results, req.method))
         return d
 
     def clear_job(self, x):
@@ -583,13 +586,12 @@ class CassandraClusterPool(service.Service, object):
     request_retries = 4
     conn_factory = CassandraPoolReconnectorFactory
 
-    retryables = (IOError, socket.error, Thrift.TException,
-                  ttypes.TimedOutException, ttypes.UnavailableException,
-                  TTransport.TTransportException)
+    retryables = [IOError, socket.error, Thrift.TException,
+                  TTransport.TTransportException]
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None):
+                 log_cb=log.msg, reactor=None, thrift_api=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -632,7 +634,18 @@ class CassandraClusterPool(service.Service, object):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
+
+        @param thrift_api: If given and not None, an object under which
+            the names 'Cassandra', 'ttypes', and 'constants' can be found
+            (corresponding to the Thrift Cassandra API code which should be
+            used for connections from this pool). The default is to use the
+            latest available API.
         """
+
+        if thrift_api is None:
+            thrift_api = cassandra.latest
+        self.thrift_api = thrift_api
+        self.ttypes = thrift_api.ttypes
 
         self.seed_list = list(seed_list)
         if thrift_port is None:
@@ -654,6 +667,9 @@ class CassandraClusterPool(service.Service, object):
         if reactor is None:
             from twisted.internet import reactor
         self.reactor = reactor
+
+        self.retryables.extend((self.ttypes.TimedOutException,
+                                self.ttypes.UnavailableException))
 
         # A set of CassandraNode instances representing known nodes. This
         # includes nodes from the initial seed list, nodes seen in
@@ -1067,7 +1083,7 @@ class CassandraClusterPool(service.Service, object):
 
     consistency = property(get_consistency, set_consistency)
 
-    def keyspaceConnection(self, keyspace, consistency=ttypes.ConsistencyLevel.ONE):
+    def keyspaceConnection(self, keyspace, consistency=ConsistencyLevel.ONE):
         """
         Return a CassandraClient instance which uses this CassandraClusterPool
         by way of a CassandraKeyspaceConnection, so that all requests made
