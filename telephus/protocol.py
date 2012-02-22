@@ -25,13 +25,12 @@ class ManagedThriftRequest(object):
 
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
-    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None, api_version=None):
+    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
         TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
         self.iprot_factory = iprot_factory
         self.deferred = None
         self.aborted = False
         self.keyspace = keyspace
-        self.api_version = api_version
 
     def connectionMade(self):
         TTwisted.ThriftClientProtocol.connectionMade(self)
@@ -41,15 +40,9 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
     def setupConnection(self):
         d = self.client.describe_version()
-        def check_version(thrift_ver):
-            cver = translate.thrift_api_ver_to_cassandra_ver(thrift_ver)
-            if self.api_version is None:
-                self.api_version = cver
-            elif self.api_version != cver:
-                raise APIMismatch("%s is exposing thrift protocol version %s -> "
-                                  "Cassandra version %s, but %s was expected"
-                                  % (self.transport.getPeer(), thrift_ver, cver, self.api_version))
-        d.addCallback(check_version)
+        def get_version(thrift_ver):
+            self.api_version = thrift_ver
+        d.addCallback(get_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
         return d
@@ -93,9 +86,9 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.transport.loseConnection()
 
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
-    def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None, api_version=None):
+    def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None):
         ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory,
-                                             keyspace=keyspace, api_version=api_version)
+                                             keyspace=keyspace)
         self.credentials = credentials
 
     def setupConnection(self):
@@ -108,7 +101,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, keyspace=None, retries=0, credentials={}, require_api_version=None):
+    def __init__(self, keyspace=None, retries=0, credentials={}):
         self.deferred   = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
@@ -119,7 +112,6 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.credentials = credentials
         if credentials:
             self.protocol = AuthenticatedThriftClientProtocol
-        self.require_api_version = require_api_version
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -148,12 +140,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         if self.credentials:
             p = self.protocol(self.keyspace,
                               self.credentials,
-                              self.thriftFactory(),
-                              api_version=self.require_api_version)
+                              self.thriftFactory())
         else:
             p = self.protocol(self.thriftFactory(),
-                              keyspace=self.keyspace,
-                              api_version=self.require_api_version)
+                              keyspace=self.keyspace)
         p.factory = self
         return p
 
