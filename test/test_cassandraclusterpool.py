@@ -11,7 +11,7 @@ from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory
                            CassandraPoolParticipantClient, TTransport)
 from telephus import translate
 from telephus.cassandra.c08 import Cassandra
-from telephus.cassandra.ttypes import *
+from telephus.cassandra.latest import ttypes
 
 try:
     from Cassanova import cassanova
@@ -123,17 +123,17 @@ class CassandraClusterPoolTest(unittest.TestCase):
         if ksname is None:
             ksname = self.ksname
         yield self.pool.system_add_keyspace(
-            KsDef(
+            ttypes.KsDef(
                 name=ksname,
                 replication_factor=1,
                 strategy_class='org.apache.cassandra.locator.SimpleStrategy',
                 cf_defs=(
-                    CfDef(
+                    ttypes.CfDef(
                         keyspace=ksname,
                         name='Standard1',
                         column_type='Standard'
                     ),
-                    CfDef(
+                    ttypes.CfDef(
                         keyspace=ksname,
                         name='Super1',
                         column_type='Super'
@@ -156,9 +156,9 @@ class CassandraClusterPoolTest(unittest.TestCase):
         mutmap = {}
         for k in range(numkeys):
             key = 'key%03d' % k
-            cols = [Column(name='%s-%03d-%03d' % (ksname, k, n),
-                           value='val-%s-%03d-%03d' % (ksname, k, n),
-                           timestamp=timestamp)
+            cols = [ttypes.Column(name='%s-%03d-%03d' % (ksname, k, n),
+                                  value='val-%s-%03d-%03d' % (ksname, k, n),
+                                  timestamp=timestamp)
                     for n in range(numcols)]
             mutmap[key] = {cf: cols}
         yield self.pool.batch_mutate(mutationmap=mutmap)
@@ -220,7 +220,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield self.insert_dumb_rows('KS1')
 
             yield self.assertFailure(self.pool.set_keyspace('i-dont-exist'),
-                                     InvalidRequestException)
+                                     ttypes.InvalidRequestException)
             self.flushLoggedErrors()
 
             # should still be in KS1

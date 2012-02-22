@@ -57,7 +57,7 @@ from thrift.protocol import TBinaryProtocol
 from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
 from telephus.cassandra.c08 import Cassandra as Cassandra08
-from telephus.cassandra.ttypes import *
+from telephus.cassandra.latest import ttypes
 from telephus.client import CassandraClient
 from telephus.translate import translateArgs, postProcess
 
@@ -229,7 +229,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def my_login(self, creds):
         return self.execute(
-            ManagedThriftRequest('login', AuthenticationRequest(credentials=creds))
+            ManagedThriftRequest('login', ttypes.AuthenticationRequest(credentials=creds))
         )
 
     def my_set_keyspace(self, keyspace):
@@ -584,7 +584,7 @@ class CassandraClusterPool(service.Service, object):
     conn_factory = CassandraPoolReconnectorFactory
 
     retryables = (IOError, socket.error, Thrift.TException,
-                  TimedOutException, UnavailableException,
+                  ttypes.TimedOutException, ttypes.UnavailableException,
                   TTransport.TTransportException)
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
@@ -1067,7 +1067,7 @@ class CassandraClusterPool(service.Service, object):
 
     consistency = property(get_consistency, set_consistency)
 
-    def keyspaceConnection(self, keyspace, consistency=ConsistencyLevel.ONE):
+    def keyspaceConnection(self, keyspace, consistency=ttypes.ConsistencyLevel.ONE):
         """
         Return a CassandraClient instance which uses this CassandraClusterPool
         by way of a CassandraKeyspaceConnection, so that all requests made

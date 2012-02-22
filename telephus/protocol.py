@@ -5,7 +5,7 @@ from twisted.internet import defer, reactor
 from twisted.internet.error import UserError
 from twisted.python import failure
 from telephus import translate
-from telephus.cassandra.ttypes import *
+from telephus.cassandra.latest import ttypes
 from telephus.cassandra.c08 import Cassandra
 from sys import exc_info
 
@@ -92,7 +92,7 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         self.credentials = credentials
 
     def setupConnection(self):
-        d = self.client.login(AuthenticationRequest(credentials=self.credentials))
+        d = self.client.login(ttypes.AuthenticationRequest(credentials=self.credentials))
         d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(self))
         return d
 
@@ -166,12 +166,12 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         dfrds = []
         for p in self._protos:
             dfrds.append(p.submitRequest(ManagedThriftRequest('login',
-                    AuthenticationRequest(credentials=credentials))))
+                    ttypes.AuthenticationRequest(credentials=credentials))))
         return defer.gatherResults(dfrds)
 
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
-            if err.check(InvalidRequestException, InvalidThriftRequest) or r < 1:
+            if err.check(ttypes.InvalidRequestException, InvalidThriftRequest) or r < 1:
                 if err.tb is None:
                     try:
                         raise err.value
