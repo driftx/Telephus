@@ -318,26 +318,33 @@ class CassandraClientTest(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_column_family_manipulation(self):
-        cfdef = CfDef(KEYSPACE, T_CF,
-            column_type='Standard',
-            comparator_type='org.apache.cassandra.db.marshal.BytesType',
-            comment='foo',
-            read_repair_chance=1.0,
-            column_metadata=[],
-            gc_grace_seconds=86400,
-            default_validation_class='org.apache.cassandra.db.marshal.BytesType',
-            min_compaction_threshold=5,
-            max_compaction_threshold=31,
+        # CfDef attributes present in all supported c*/thrift-api versions
+        common_attrs = (
+            ('column_type', 'Standard'),
+            ('comparator_type', 'org.apache.cassandra.db.marshal.BytesType'),
+            ('comment', 'foo'),
+            ('read_repair_chance', 1.0),
+            ('column_metadata', []),
+            ('gc_grace_seconds', 86400),
+            ('default_validation_class', 'org.apache.cassandra.db.marshal.BytesType'),
+            ('min_compaction_threshold', 5),
+            ('max_compaction_threshold', 31),
         )
+        cfdef = CfDef(KEYSPACE, T_CF)
+        for attr, val in common_attrs:
+            setattr(cfdef, attr, val)
 
         yield self.client.system_add_column_family(cfdef)
         ksdef = yield self.client.describe_keyspace(KEYSPACE)
-        cfdef2 = [c for c in ksdef.cf_defs if c.name == T_CF][0]
+        cfdefs = [c for c in ksdef.cf_defs if c.name == T_CF]
+        self.assertEqual(len(cfdefs), 1)
+        cfdef2 = cfdefs[0]
 
-        # we don't know the id ahead of time. copy the new one so the equality
-        # comparison won't fail
-        cfdef.id = cfdef2.id
-        self.assertEqual(cfdef, cfdef2)
+        for attr, val in common_attrs:
+            val1 = getattr(cfdef, attr)
+            val2 = getattr(cfdef2, attr)
+            self.assertEqual(val1, val2, 'attribute %s mismatch: %r != %r' % (attr, val1, val2))
+
         if DO_SYSTEM_RENAMING:
             newname = T_CF + '2'
             yield self.client.system_rename_column_family(T_CF, newname)
