@@ -59,8 +59,7 @@ from telephus.protocol import (ManagedThriftRequest, ClientBusy,
 from telephus.cassandra.c08 import Cassandra as Cassandra08
 from telephus.cassandra.ttypes import *
 from telephus.client import CassandraClient
-from telephus.translate import (thrift_api_ver_to_cassandra_ver, translateArgs,
-                                postProcess)
+from telephus.translate import translateArgs, postProcess
 
 noop = lambda *a, **kw: None
 
