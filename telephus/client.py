@@ -138,6 +138,7 @@ class CassandraClient(object):
             column_finish='', names=None, count=100, column_count=100,
             reverse=False, consistency=None, super_column=None,
             retries=None):
+        # NOTE: IndexClause and get_indexed_slices are deprecated
         idx_clause = IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
