@@ -1,5 +1,5 @@
 from twisted.internet import defer, reactor
-from telephus.cassandra.ttypes import *
+from telephus.cassandra.latest import ttypes
 from telephus.protocol import ManagedThriftRequest
 from collections import defaultdict
 import time
@@ -18,7 +18,7 @@ class requirekwargs:
         return wrapper
 
 class CassandraClient(object):
-    def __init__(self, manager, consistency=ConsistencyLevel.ONE):
+    def __init__(self, manager, consistency=ttypes.ConsistencyLevel.ONE):
         self.manager = manager
         self.consistency = consistency
 
@@ -27,13 +27,13 @@ class CassandraClient(object):
 
     def _getparent(self, columnParentOrCF, super_column=None):
         if isinstance(columnParentOrCF, str):
-            return ColumnParent(columnParentOrCF, super_column=super_column)
+            return ttypes.ColumnParent(columnParentOrCF, super_column=super_column)
         else:
             return columnParentOrCF
 
     def _getpath(self, columnPathOrCF, col, super_column=None):
         if isinstance(columnPathOrCF, str):
-            return ColumnPath(columnPathOrCF, super_column=super_column, column=col)
+            return ttypes.ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
 
@@ -41,8 +41,8 @@ class CassandraClient(object):
         if names:
             srange = None
         else:
-            srange = SliceRange(start, finish, reverse, count)
-        return SlicePredicate(names, srange)
+            srange = ttypes.SliceRange(start, finish, reverse, count)
+        return ttypes.SlicePredicate(names, srange)
 
     @defer.inlineCallbacks
     def _wait_for_schema_agreement(self):
@@ -126,9 +126,9 @@ class CassandraClient(object):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         if not use_tokens:
-            krange = KeyRange(start_key=start, end_key=finish, count=count)
+            krange = ttypes.KeyRange(start_key=start, end_key=finish, count=count)
         else:
-            krange = KeyRange(start_token=start, end_token=finish, count=count)
+            krange = ttypes.KeyRange(start_token=start, end_token=finish, count=count)
         pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
         req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
@@ -139,7 +139,7 @@ class CassandraClient(object):
             reverse=False, consistency=None, super_column=None,
             retries=None):
         # NOTE: IndexClause and get_indexed_slices are deprecated
-        idx_clause = IndexClause(expressions, start_key, count)
+        idx_clause = ttypes.IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
@@ -152,7 +152,7 @@ class CassandraClient(object):
         timestamp = timestamp or self._time()
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('insert', key, cp, Column(column, value, timestamp, ttl), consistency)
+        req = ManagedThriftRequest('insert', key, cp, ttypes.Column(column, value, timestamp, ttl), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'value', 'column')
@@ -160,7 +160,7 @@ class CassandraClient(object):
             consistency=None, retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('add', key, cp, CounterColumn(column, value), consistency)
+        req = ManagedThriftRequest('add', key, cp, ttypes.CounterColumn(column, value), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
@@ -201,7 +201,7 @@ class CassandraClient(object):
         for cf, keys in cfmap.iteritems():
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
-                mutmap[key][cf] = [Mutation(deletion=Deletion(timestamp, supercolumn, pred))]
+                mutmap[key][cf] = [ttypes.Mutation(deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
@@ -215,12 +215,12 @@ class CassandraClient(object):
                 cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, ttl, make_deletions=True)
                 muts = []
                 for c in cols_or_supers_or_deletions:
-                    if isinstance(c, SuperColumn):
-                        muts.append(Mutation(ColumnOrSuperColumn(super_column=c)))
-                    elif isinstance(c, Column):
-                        muts.append(Mutation(ColumnOrSuperColumn(column=c)))
-                    elif isinstance(c, Deletion):
-                        muts.append(Mutation(deletion=c))
+                    if isinstance(c, ttypes.SuperColumn):
+                        muts.append(ttypes.Mutation(ttypes.ColumnOrSuperColumn(super_column=c)))
+                    elif isinstance(c, ttypes.Column):
+                        muts.append(ttypes.Mutation(ttypes.ColumnOrSuperColumn(column=c)))
+                    elif isinstance(c, ttypes.Deletion):
+                        muts.append(ttypes.Mutation(deletion=c))
                     else:
                         muts.append(c)
                 mutmap[key][cf] = muts
@@ -237,17 +237,17 @@ class CassandraClient(object):
                 for name in mapping:
                     cols = []
                     for col,val in mapping[name].iteritems():
-                        cols.append(Column(col, val, timestamp, ttl))
-                    colsorsupers.append(SuperColumn(name=name, columns=cols))
+                        cols.append(ttypes.Column(col, val, timestamp, ttl))
+                    colsorsupers.append(ttypes.SuperColumn(name=name, columns=cols))
             else:
                 cols2delete = []
                 for col, val in mapping.iteritems():
                     if val is None and make_deletions:
                         cols2delete.append(col)
                     else:
-                        colsorsupers.append(Column(col, val, timestamp, ttl))
+                        colsorsupers.append(ttypes.Column(col, val, timestamp, ttl))
                 if cols2delete:
-                    colsorsupers.append(Deletion(timestamp, None, SlicePredicate(column_names=cols2delete)))
+                    colsorsupers.append(ttypes.Deletion(timestamp, None, ttypes.SlicePredicate(column_names=cols2delete)))
         else:
             raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
         return colsorsupers

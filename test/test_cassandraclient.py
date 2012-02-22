@@ -4,7 +4,7 @@ from twisted.internet import defer, reactor, error
 from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
 from telephus.client import CassandraClient
 from telephus import translate
-from telephus.cassandra.ttypes import *
+from telephus.cassandra.latest import ttypes
 import os
 
 CONNS = 5
@@ -41,31 +41,31 @@ class CassandraClientTest(unittest.TestCase):
         remote_ver = yield self.client.describe_version()
         self.version = map(int, remote_ver.split('.'))
 
-        self.my_keyspace = KsDef(
+        self.my_keyspace = ttypes.KsDef(
             name=KEYSPACE,
             strategy_class='org.apache.cassandra.locator.SimpleStrategy',
             strategy_options={'replication_factor': '1'},
             cf_defs=[
-                CfDef(
+                ttypes.CfDef(
                     keyspace=KEYSPACE,
                     name=CF,
                     column_type='Standard'
                 ),
-                CfDef(
+                ttypes.CfDef(
                     keyspace=KEYSPACE,
                     name=SCF,
                     column_type='Super'
                 ),
-                CfDef(
+                ttypes.CfDef(
                     keyspace=KEYSPACE,
                     name=IDX_CF,
                     column_type='Standard',
                     comparator_type='org.apache.cassandra.db.marshal.UTF8Type',
                     column_metadata=[
-                        ColumnDef(
+                        ttypes.ColumnDef(
                             name='col1',
                             validation_class='org.apache.cassandra.db.marshal.UTF8Type',
-                            index_type=IndexType.KEYS,
+                            index_type=ttypes.IndexType.KEYS,
                             index_name='idxCol1')
                     ],
                     default_validation_class='org.apache.cassandra.db.marshal.BytesType'
@@ -74,13 +74,13 @@ class CassandraClientTest(unittest.TestCase):
         )
         if self.version >= COUNTERS_SUPPORTED_API:
             self.my_keyspace.cf_defs.extend([
-                CfDef(
+                ttypes.CfDef(
                     keyspace=KEYSPACE,
                     name=COUNTER_CF,
                     column_type='Standard',
                     default_validation_class='org.apache.cassandra.db.marshal.CounterColumnType'
                 ),
-                CfDef(
+                ttypes.CfDef(
                     keyspace=KEYSPACE,
                     name=SUPERCOUNTER_CF,
                     column_type='Super',
@@ -195,7 +195,7 @@ class CassandraClientTest(unittest.TestCase):
         yield self.client.insert('test1', IDX_CF, 'one', column='col1')
         yield self.client.insert('test2', IDX_CF, 'two', column='col1')
         yield self.client.insert('test3', IDX_CF, 'three', column='col1')
-        expressions = [IndexExpression('col1', IndexOperator.EQ, 'two')]
+        expressions = [ttypes.IndexExpression('col1', ttypes.IndexOperator.EQ, 'two')]
         res = yield self.client.get_indexed_slices(IDX_CF, expressions, start_key='')
         self.assertEquals(res[0].columns[0].column.value,'two')
 
@@ -234,7 +234,7 @@ class CassandraClientTest(unittest.TestCase):
 
         yield self.client.remove_counter('test', COUNTER_CF, column='col')
         yield self.assertFailure(self.client.get('test', COUNTER_CF, column='col'),
-                                 NotFoundException)
+                                 ttypes.NotFoundException)
 
         # test super column counters
         yield self.client.add('test', SUPERCOUNTER_CF, 1, column='col', super_column='scol')
@@ -245,7 +245,7 @@ class CassandraClientTest(unittest.TestCase):
                                          column='col', super_column='scol')
         yield self.assertFailure(self.client.get('test', SUPERCOUNTER_CF,
                                                  column='col', super_column='scol'),
-                                 NotFoundException)
+                                 ttypes.NotFoundException)
 
     def sleep(self, secs):
         d = defer.Deferred()
@@ -258,19 +258,19 @@ class CassandraClientTest(unittest.TestCase):
         res = yield self.client.get('test_ttls', CF, column=COLUMN)
         self.assertEqual(res.column.value, 'testval')
         yield self.sleep(2)
-        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), ttypes.NotFoundException)
 
         yield self.client.batch_insert('test_ttls', CF, {COLUMN:'testval'}, ttl=1)
         res = yield self.client.get('test_ttls', CF, column=COLUMN)
         self.assertEqual(res.column.value, 'testval')
         yield self.sleep(2)
-        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), ttypes.NotFoundException)
 
         yield self.client.batch_mutate({'test_ttls': {CF: {COLUMN: 'testval'}}}, ttl=1)
         res = yield self.client.get('test_ttls', CF, column=COLUMN)
         self.assertEqual(res.column.value, 'testval')
         yield self.sleep(2)
-        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), NotFoundException)
+        yield self.assertFailure(self.client.get('test_ttls', CF, column=COLUMN), ttypes.NotFoundException)
 
     def compare_keyspaces(self, ks1, ks2):
         self.assertEqual(ks1.name, ks2.name)
@@ -299,9 +299,9 @@ class CassandraClientTest(unittest.TestCase):
     def test_keyspace_manipulation(self):
         try:
             yield self.client.system_drop_keyspace(T_KEYSPACE)
-        except InvalidRequestException:
+        except ttypes.InvalidRequestException:
             pass
-        ksdef = KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={'replication_factor': '1'}, cf_defs=[])
+        ksdef = ttypes.KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={'replication_factor': '1'}, cf_defs=[])
         yield self.client.system_add_keyspace(ksdef)
         ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
         self.compare_keyspaces(ksdef, ks2)
@@ -313,9 +313,9 @@ class CassandraClientTest(unittest.TestCase):
             ksdef.name = newname
             self.compare_keyspaces(ksdef, ks2)
         yield self.client.system_drop_keyspace(ksdef.name)
-        yield self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), NotFoundException)
+        yield self.assertFailure(self.client.describe_keyspace(T_KEYSPACE), ttypes.NotFoundException)
         if DO_SYSTEM_RENAMING:
-            yield self.assertFailure(self.client.describe_keyspace(ksdef.name), NotFoundException)
+            yield self.assertFailure(self.client.describe_keyspace(ksdef.name), ttypes.NotFoundException)
 
     @defer.inlineCallbacks
     def test_column_family_manipulation(self):
@@ -331,7 +331,7 @@ class CassandraClientTest(unittest.TestCase):
             ('min_compaction_threshold', 5),
             ('max_compaction_threshold', 31),
         )
-        cfdef = CfDef(KEYSPACE, T_CF)
+        cfdef = ttypes.CfDef(KEYSPACE, T_CF)
         for attr, val in common_attrs:
             setattr(cfdef, attr, val)
 
