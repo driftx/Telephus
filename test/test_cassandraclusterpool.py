@@ -10,8 +10,7 @@ from twisted.python import log
 from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
                            CassandraPoolParticipantClient, TTransport)
 from telephus import translate
-from telephus.cassandra.c08 import Cassandra
-from telephus.cassandra.latest import ttypes
+from telephus.cassandra.latest import Cassandra, ttypes
 
 try:
     from Cassanova import cassanova
@@ -97,12 +96,12 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
-                         cluster_class=None, api_version=None):
+                         cluster_class=None, thrift_api=None):
         if cluster_class is None:
             cluster_class = FakeCassandraCluster
         cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
-                                    pool_size=pool_size, api_version=api_version)
+                                    pool_size=pool_size, thrift_api=thrift_api)
         if start:
             cluster.startService()
             pool.startService()
@@ -810,8 +809,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             self.assertApproximates(opsdone, numops, 0.5 * numops)
 
         starttime = time()
-        with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes,
-                                   api_version=translate.CASSANDRA_08_VERSION):
+        with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes):
             yield self.make_standard_cfs(ksname)
             yield self.insert_dumb_rows(ksname, numkeys=num_keys)
 
