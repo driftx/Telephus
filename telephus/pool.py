@@ -96,7 +96,7 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
     def __init__(self, thrift_api):
-        TTwisted.ThriftClientProtocol.__init__(self, self.thrift_api.Cassandra.Client,
+        TTwisted.ThriftClientProtocol.__init__(self, thrift_api.Cassandra.Client,
                                                self.thriftFactory())
 
     def connectionMade(self):
@@ -139,6 +139,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if thrift_api is None:
             thrift_api = cassandra.latest
         self.thrift_api = thrift_api
+        self.api_version = thrift_api.constants.VERSION
         self.protocol = partial(CassandraPoolParticipantClient, thrift_api)
 
     def clientConnectionMade(self, proto):
@@ -404,9 +405,13 @@ class CassandraKeyspaceConnection:
     regardless of what other consumers of the CassandraClusterPool might do.
     """
 
-    def __init__(self, pool, keyspace):
+    def __init__(self, pool, keyspace, thrift_api=None):
         self.pool = pool
         self.keyspace = keyspace
+        if thrift_api is None:
+            thrift_api = cassandra.latest
+        self.thrift_api = thrift_api
+        self.ttypes = thrift_api.ttypes
 
     def pushRequest(self, req, retries=None):
         return self.pool.pushRequest(req, retries=retries, keyspace=self.keyspace)
@@ -1090,8 +1095,8 @@ class CassandraClusterPool(service.Service, object):
         through it are guaranteed to go to the given keyspace, no matter what
         other consumers of this pool may do.
         """
-        return CassandraClient(CassandraKeyspaceConnection(self, keyspace),
-                               consistency=consistency)
+        conn = CassandraKeyspaceConnection(self, keyspace, thrift_api=self.thrift_api)
+        return CassandraClient(conn, consistency=consistency)
 
     def __str__(self):
         return '<%s: [%d nodes known] [%d connections]>' \
