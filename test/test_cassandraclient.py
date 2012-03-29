@@ -39,7 +39,7 @@ class CassandraClientTest(unittest.TestCase):
         yield self.cmanager.deferred
 
         remote_ver = yield self.client.describe_version()
-        self.version = map(int, remote_ver.split('.'))
+        self.version = tuple(map(int, remote_ver.split('.')))
 
         self.my_keyspace = ttypes.KsDef(
             name=KEYSPACE,
