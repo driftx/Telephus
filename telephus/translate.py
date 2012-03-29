@@ -5,7 +5,8 @@ def translateArgs(request, api_version):
     args = request.args
     if request.method == 'system_add_keyspace' \
     or request.method == 'system_update_keyspace':
-        args = adapt_ksdef_rf(args[0]) + args[1:]
+        adapted_ksdef = adapt_ksdef_rf(args[0])
+        args = (adapted_ksdef,) + args[1:]
     return args
 
 def postProcess(results, method):
