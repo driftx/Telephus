@@ -7,10 +7,9 @@ from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from twisted.python import log
-from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
-                           CassandraPoolParticipantClient, TTransport)
-from telephus import translate
-from telephus.cassandra.latest import Cassandra, ttypes
+
+from telephus.pool import CassandraClusterPool, TTransport
+from telephus.cassandra import ttypes
 
 try:
     from Cassanova import cassanova
@@ -96,12 +95,12 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
-                         cluster_class=None, thrift_api=None):
+                         cluster_class=None):
         if cluster_class is None:
             cluster_class = FakeCassandraCluster
         cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
-                                    pool_size=pool_size, thrift_api=thrift_api)
+                                    pool_size=pool_size)
         if start:
             cluster.startService()
             pool.startService()
@@ -334,7 +333,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield deferwait(0.1)
 
             workers = self.assertNumWorkers(1)
-            node = self.killWorkingNode()
+            self.killWorkingNode()
 
             # allow reconnect
             yield deferwait(0.5)

@@ -1,11 +1,11 @@
 from twisted.trial import unittest
-from twisted.python.failure import Failure
-from twisted.internet import defer, reactor, error
-from telephus.protocol import ManagedCassandraClientFactory, APIMismatch
-from telephus.client import CassandraClient
-from telephus import translate
-from telephus.cassandra.latest import ttypes
 import os
+
+from twisted.internet import defer, reactor, error
+from telephus.protocol import ManagedCassandraClientFactory
+from telephus.client import CassandraClient
+
+from telephus.cassandra import ttypes
 
 CONNS = 5
 
