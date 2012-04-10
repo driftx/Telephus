@@ -2,8 +2,8 @@ from telephus.cassandra.c07.constants import VERSION as CASSANDRA_07_VERSION
 from telephus.cassandra.c08.constants import VERSION as CASSANDRA_08_VERSION
 
 supported_versions = (
-    ('0.7', CASSANDRA_07_VERSION),
     ('0.8', CASSANDRA_08_VERSION),
+    ('0.7', CASSANDRA_07_VERSION),
 )
 
 class APIMismatch(Exception):
