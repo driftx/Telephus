@@ -1,1 +1,1 @@
-import latest
+__all__ = ['ttypes', 'constants', 'Cassandra']
