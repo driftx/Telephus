@@ -7,9 +7,11 @@ from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from twisted.python import log
-
 from telephus.pool import CassandraClusterPool, TTransport
+
 from telephus.cassandra import ttypes
+from telephus.cassandra.c07 import ttypes as c07ttypes
+from telephus.cassandra.c08 import ttypes as c08ttypes
 
 try:
     from Cassanova import cassanova
@@ -826,6 +828,30 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.assertApproximates(endtime - starttime, runtime, 0.5 * runtime)
         self.flushLoggedErrors()
+
+    def test_get_endpoints_from_tokenrange(self):
+        with self.cluster_and_pool(pool_size=1, num_nodes=1):
+            # 07 token ranges have no rpc property
+            range07 = c07ttypes.TokenRange(
+                        start_token="1",
+                        end_token="2",
+                        endpoints=["127.0.0.1", "127.0.0.2"])
+            self.assertEqual(["127.0.0.1", "127.0.0.2"], self.pool.get_endpoints_from_tokenrange(range07))
+
+            # the rpc endpoints field is optional, so test without it set
+            range08 = c08ttypes.TokenRange(
+                        start_token="1",
+                        end_token="2",
+                        endpoints=["127.0.0.1", "127.0.0.2"])
+            self.assertEqual(["127.0.0.1", "127.0.0.2"], self.pool.get_endpoints_from_tokenrange(range08))
+
+            # test with some bad rpc_endpoints
+            range08 = c08ttypes.TokenRange(
+                        start_token="1",
+                        end_token="2",
+                        endpoints=["127.0.0.1", "127.0.0.2"],
+                        rpc_endpoints=["127.0.0.5", "0.0.0.0"])
+            self.assertEqual(["127.0.0.5", "127.0.0.2"], self.pool.get_endpoints_from_tokenrange(range08))
 
 if cassanova:
     class EnhancedCassanovaInterface(cassanova.CassanovaInterface):

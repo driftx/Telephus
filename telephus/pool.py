@@ -836,9 +836,18 @@ class CassandraClusterPool(service.Service, object):
         self.kill_excess_conns()
         self.fill_pool()
 
+    def get_endpoints_from_tokenrange(self, tokenrange):
+        if hasattr(tokenrange, "rpc_endpoints") and tokenrange.rpc_endpoints:
+            def good_addr(ep, rpc):
+                return rpc if not rpc.startswith("0.0.0.0") else ep
+            return map(good_addr, tokenrange.endpoints, tokenrange.rpc_endpoints)
+        else:
+            return tokenrange.endpoints
+
     def update_known_nodes(self, ring):
         for tokenrange in ring:
-            for addr in tokenrange.endpoints:
+            endpoints = self.get_endpoints_from_tokenrange(tokenrange)
+            for addr in endpoints:
                 if ':' in addr:
                     addr, port = addr.split(':', 1)
                     port = int(port)
