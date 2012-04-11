@@ -1,10 +1,10 @@
 from twisted.internet import defer, reactor
-from telephus import cassandra
+from telephus.cassandra import ttypes
 from telephus.protocol import ManagedThriftRequest
 from collections import defaultdict
 import time
 
-ConsistencyLevel = cassandra.latest.ttypes.ConsistencyLevel
+ConsistencyLevel = ttypes.ConsistencyLevel
 
 class requirekwargs:
     def __init__(self, *args):
@@ -23,20 +23,19 @@ class CassandraClient(object):
     def __init__(self, manager, consistency=ConsistencyLevel.ONE):
         self.manager = manager
         self.consistency = consistency
-        self.ttypes = self.manager.ttypes
 
     def _time(self):
         return int(time.time() * 1000000)
 
     def _getparent(self, columnParentOrCF, super_column=None):
         if isinstance(columnParentOrCF, str):
-            return self.ttypes.ColumnParent(columnParentOrCF, super_column=super_column)
+            return ttypes.ColumnParent(columnParentOrCF, super_column=super_column)
         else:
             return columnParentOrCF
 
     def _getpath(self, columnPathOrCF, col, super_column=None):
         if isinstance(columnPathOrCF, str):
-            return self.ttypes.ColumnPath(columnPathOrCF, super_column=super_column, column=col)
+            return ttypes.ColumnPath(columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
 
@@ -44,8 +43,8 @@ class CassandraClient(object):
         if names:
             srange = None
         else:
-            srange = self.ttypes.SliceRange(start, finish, reverse, count)
-        return self.ttypes.SlicePredicate(names, srange)
+            srange = ttypes.SliceRange(start, finish, reverse, count)
+        return ttypes.SlicePredicate(names, srange)
 
     @defer.inlineCallbacks
     def _wait_for_schema_agreement(self):
@@ -129,9 +128,9 @@ class CassandraClient(object):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         if not use_tokens:
-            krange = self.ttypes.KeyRange(start_key=start, end_key=finish, count=count)
+            krange = ttypes.KeyRange(start_key=start, end_key=finish, count=count)
         else:
-            krange = self.ttypes.KeyRange(start_token=start, end_token=finish, count=count)
+            krange = ttypes.KeyRange(start_token=start, end_token=finish, count=count)
         pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
         req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
@@ -142,7 +141,7 @@ class CassandraClient(object):
             reverse=False, consistency=None, super_column=None,
             retries=None):
         # NOTE: IndexClause and get_indexed_slices are deprecated
-        idx_clause = self.ttypes.IndexClause(expressions, start_key, count)
+        idx_clause = ttypes.IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
@@ -155,7 +154,7 @@ class CassandraClient(object):
         timestamp = timestamp or self._time()
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('insert', key, cp, self.ttypes.Column(column, value, timestamp, ttl), consistency)
+        req = ManagedThriftRequest('insert', key, cp, ttypes.Column(column, value, timestamp, ttl), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'value', 'column')
@@ -163,7 +162,7 @@ class CassandraClient(object):
             consistency=None, retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('add', key, cp, self.ttypes.CounterColumn(column, value), consistency)
+        req = ManagedThriftRequest('add', key, cp, ttypes.CounterColumn(column, value), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
@@ -204,7 +203,7 @@ class CassandraClient(object):
         for cf, keys in cfmap.iteritems():
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
-                mutmap[key][cf] = [self.ttypes.Mutation(deletion=self.ttypes.Deletion(timestamp, supercolumn, pred))]
+                mutmap[key][cf] = [ttypes.Mutation(deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
         req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
@@ -213,7 +212,6 @@ class CassandraClient(object):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
-        ttypes = self.ttypes
         for key, cfmap in mutationmap.iteritems():
             for cf, colmap in cfmap.iteritems():
                 cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, ttl, make_deletions=True)
@@ -234,7 +232,6 @@ class CassandraClient(object):
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
         if isinstance(mapping, list):
             return mapping
-        ttypes = self.ttypes
         colsorsupers = []
         if isinstance(mapping, dict):
             first = mapping.keys()[0]
