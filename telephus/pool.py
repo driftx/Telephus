@@ -49,18 +49,21 @@ from time import time
 from itertools import izip, groupby
 from warnings import warn
 from functools import partial
+
 from twisted.application import service
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
 from thrift import Thrift
 from thrift.transport import TTwisted, TTransport
 from thrift.protocol import TBinaryProtocol
+
 from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
-from telephus import translate, cassandra
+from telephus import translate
+from telephus.cassandra import ttypes, Cassandra
 from telephus.client import CassandraClient
 
-ConsistencyLevel = cassandra.latest.ttypes.ConsistencyLevel
+ConsistencyLevel = ttypes.ConsistencyLevel
 
 noop = lambda *a, **kw: None
 
@@ -95,8 +98,8 @@ def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
-    def __init__(self, thrift_api):
-        TTwisted.ThriftClientProtocol.__init__(self, thrift_api.Cassandra.Client,
+    def __init__(self):
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client,
                                                self.thriftFactory())
 
     def connectionMade(self):
@@ -130,17 +133,14 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service, thrift_api=None):
+    def __init__(self, node, service):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
-        if thrift_api is None:
-            thrift_api = cassandra.latest
-        self.thrift_api = thrift_api
-        self.api_version = thrift_api.constants.VERSION
-        self.protocol = partial(CassandraPoolParticipantClient, thrift_api)
+        self.api_version = None
+        self.protocol = partial(CassandraPoolParticipantClient)
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
@@ -233,7 +233,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # use of the methods on CassandraClient.
 
     def my_login(self, creds):
-        req = self.thrift_api.ttypes.AuthenticationRequest(credentials=creds)
+        req = ttypes.AuthenticationRequest(credentials=creds)
         return self.execute(ManagedThriftRequest('login', req))
 
     def my_set_keyspace(self, keyspace):
@@ -405,13 +405,9 @@ class CassandraKeyspaceConnection:
     regardless of what other consumers of the CassandraClusterPool might do.
     """
 
-    def __init__(self, pool, keyspace, thrift_api=None):
+    def __init__(self, pool, keyspace):
         self.pool = pool
         self.keyspace = keyspace
-        if thrift_api is None:
-            thrift_api = cassandra.latest
-        self.thrift_api = thrift_api
-        self.ttypes = thrift_api.ttypes
 
     def pushRequest(self, req, retries=None):
         return self.pool.pushRequest(req, retries=retries, keyspace=self.keyspace)
@@ -596,7 +592,7 @@ class CassandraClusterPool(service.Service, object):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None, thrift_api=None):
+                 log_cb=log.msg, reactor=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -639,18 +635,7 @@ class CassandraClusterPool(service.Service, object):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
-
-        @param thrift_api: If given and not None, an object under which
-            the names 'Cassandra', 'ttypes', and 'constants' can be found
-            (corresponding to the Thrift Cassandra API code which should be
-            used for connections from this pool). The default is to use the
-            latest available API.
         """
-
-        if thrift_api is None:
-            thrift_api = cassandra.latest
-        self.thrift_api = thrift_api
-        self.ttypes = thrift_api.ttypes
 
         self.seed_list = list(seed_list)
         if thrift_port is None:
@@ -673,8 +658,8 @@ class CassandraClusterPool(service.Service, object):
             from twisted.internet import reactor
         self.reactor = reactor
 
-        self.retryables.extend((self.ttypes.TimedOutException,
-                                self.ttypes.UnavailableException))
+        self.retryables.extend((ttypes.TimedOutException,
+                                ttypes.UnavailableException))
 
         # A set of CassandraNode instances representing known nodes. This
         # includes nodes from the initial seed list, nodes seen in
@@ -1104,7 +1089,7 @@ class CassandraClusterPool(service.Service, object):
         through it are guaranteed to go to the given keyspace, no matter what
         other consumers of this pool may do.
         """
-        conn = CassandraKeyspaceConnection(self, keyspace, thrift_api=self.thrift_api)
+        conn = CassandraKeyspaceConnection(self, keyspace)
         return CassandraClient(conn, consistency=consistency)
 
     def __str__(self):
