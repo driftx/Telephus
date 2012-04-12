@@ -7,8 +7,8 @@ from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from twisted.python import log
+from telephus.pool import CassandraClusterPool, TTransport, get_endpoints_from_tokenrange
 
-from telephus.pool import CassandraClusterPool, TTransport
 from telephus.cassandra import ttypes
 
 try:
@@ -30,6 +30,31 @@ def addtimeout(d, waittime):
             timeouter.cancel()
         return x
     d.addBoth(canceltimeout)
+
+class GeneralPoolTest(unittest.TestCase):
+    def test_get_endpoints_from_tokenrange(self):
+        # 07 token ranges have no rpc property
+        range07 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"])
+        self.assertEqual(["127.0.0.1", "127.0.0.2"], get_endpoints_from_tokenrange(range07))
+
+        # the rpc endpoints field is optional, so test without it set
+        range08 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"],
+                    rpc_endpoints=None)
+        self.assertEqual(["127.0.0.1", "127.0.0.2"], get_endpoints_from_tokenrange(range08))
+
+        # test with some bad rpc_endpoints
+        range08 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"],
+                    rpc_endpoints=["127.0.0.5", "0.0.0.0"])
+        self.assertEqual(["127.0.0.5", "127.0.0.2"], get_endpoints_from_tokenrange(range08))
 
 class CassandraClusterPoolTest(unittest.TestCase):
     start_port = 44449
