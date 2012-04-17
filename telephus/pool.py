@@ -138,7 +138,6 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
-        self.api_version = None
         self.protocol = partial(CassandraPoolParticipantClient)
 
     def clientConnectionMade(self, proto):
@@ -215,17 +214,20 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         Return a Deferred that will fire with the ring information, or be
         errbacked if something goes wrong.
         """
-
-        d = self.my_describe_version()
-        def get_version(thrift_ver):
-            self.api_version = thrift_ver
-        d.addCallback(get_version)
+        d = None
         if creds is not None:
-            d.addCallback(lambda _: self.my_login(creds))
+            d = self.my_login(creds)
+
         if keyspace is not None:
-            d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-        d.addCallback(lambda _: self.my_describe_ring(keyspace))
-        return d
+            if d:
+                d.addCallback(lambda _: self.my_set_keyspace(keyspace))
+            else:
+                d = self.my_set_keyspace(keyspace)
+
+        if d:
+            return d.addCallback(lambda _: self.my_describe_ring(keyspace))
+        else:
+            return self.my_describe_ring(keyspace)
 
     # The following my_* methods are for internal use, to facilitate the
     # management of the pool and the queries we get. The user should make

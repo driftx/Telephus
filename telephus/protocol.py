@@ -37,9 +37,6 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
     def setupConnection(self):
         d = self.client.describe_version()
-        def get_version(thrift_ver):
-            self.api_version = thrift_ver
-        d.addCallback(get_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
         return d
