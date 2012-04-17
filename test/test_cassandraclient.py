@@ -24,6 +24,10 @@ COLUMN = 'foo'
 COLUMN2 = 'foo2'
 SCOLUMN = 'bar'
 
+# RF for SimpleStrategy keyspaces should be set on the 'replication_factor'
+# attribute of KsDefs below this version
+KS_RF_ATTRIBUTE = (19, 4, 0)
+
 COUNTERS_SUPPORTED_API = (19, 10, 0)
 
 # until Cassandra supports these again..
@@ -44,7 +48,7 @@ class CassandraClientTest(unittest.TestCase):
         self.my_keyspace = ttypes.KsDef(
             name=KEYSPACE,
             strategy_class='org.apache.cassandra.locator.SimpleStrategy',
-            strategy_options={'replication_factor': '1'},
+            strategy_options={},
             cf_defs=[
                 ttypes.CfDef(
                     keyspace=KEYSPACE,
@@ -72,6 +76,12 @@ class CassandraClientTest(unittest.TestCase):
                 ),
             ]
         )
+
+        if self.version <= KS_RF_ATTRIBUTE:
+            self.my_keyspace.replication_factor = 1
+        else:
+            self.my_keyspace.strategy_options['replication_factor'] = '1'
+
         if self.version >= COUNTERS_SUPPORTED_API:
             self.my_keyspace.cf_defs.extend([
                 ttypes.CfDef(
@@ -301,7 +311,13 @@ class CassandraClientTest(unittest.TestCase):
             yield self.client.system_drop_keyspace(T_KEYSPACE)
         except ttypes.InvalidRequestException:
             pass
-        ksdef = ttypes.KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={'replication_factor': '1'}, cf_defs=[])
+
+        ksdef = ttypes.KsDef(name=T_KEYSPACE, strategy_class='org.apache.cassandra.locator.SimpleStrategy', strategy_options={}, cf_defs=[])
+        if self.version <= KS_RF_ATTRIBUTE:
+            ksdef.replication_factor = 1
+        else:
+            ksdef.strategy_options['replication_factor'] = '1'
+
         yield self.client.system_add_keyspace(ksdef)
         ks2 = yield self.client.describe_keyspace(T_KEYSPACE)
         self.compare_keyspaces(ksdef, ks2)
