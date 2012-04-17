@@ -59,7 +59,6 @@ from thrift.protocol import TBinaryProtocol
 
 from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
-from telephus import translate
 from telephus.cassandra import ttypes, Cassandra
 from telephus.client import CassandraClient
 
@@ -297,9 +296,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             if keyspace is not None and keyspace != self.keyspace:
                 d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-            args = translate.translateArgs(req, self.api_version)
-            d.addCallback(lambda _: method(*args))
-            d.addCallback(lambda results: translate.postProcess(results, req.method))
+            d.addCallback(lambda _: method(*(req.args)))
         return d
 
     def clear_job(self, x):
