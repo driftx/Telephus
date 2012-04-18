@@ -214,20 +214,14 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         Return a Deferred that will fire with the ring information, or be
         errbacked if something goes wrong.
         """
-        d = None
+        d = defer.succeed(None)
+
         if creds is not None:
-            d = self.my_login(creds)
-
+            d.addCallback(lambda _: self.my_login(creds))
         if keyspace is not None:
-            if d:
-                d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-            else:
-                d = self.my_set_keyspace(keyspace)
+            d.addCallback(lambda _: self.my_set_keyspace(keyspace))
 
-        if d:
-            return d.addCallback(lambda _: self.my_describe_ring(keyspace))
-        else:
-            return self.my_describe_ring(keyspace)
+        return d.addCallback(lambda _: self.my_describe_ring(keyspace))
 
     # The following my_* methods are for internal use, to facilitate the
     # management of the pool and the queries we get. The user should make
