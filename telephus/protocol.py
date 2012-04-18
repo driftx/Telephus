@@ -7,7 +7,6 @@ from twisted.internet import defer
 from twisted.internet.error import UserError
 from twisted.python import failure
 
-from telephus import translate
 from telephus.cassandra import Cassandra, ttypes
 
 class ClientBusy(Exception):
@@ -15,9 +14,6 @@ class ClientBusy(Exception):
 
 class InvalidThriftRequest(Exception):
     pass
-
-# Here for backwards compatibility
-APIMismatch = translate.APIMismatch
 
 class ManagedThriftRequest(object):
     def __init__(self, method, *args):
@@ -41,9 +37,6 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
     def setupConnection(self):
         d = self.client.describe_version()
-        def get_version(thrift_ver):
-            self.api_version = thrift_ver
-        d.addCallback(get_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
         return d
@@ -68,19 +61,15 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         return res
 
     def submitRequest(self, request):
-        if not self.deferred:
-            fun = getattr(self.client, request.method, None)
-            if not fun:
-                raise InvalidThriftRequest
-            else:
-                args = translate.translateArgs(request, self.api_version)
-                d = fun(*args)
-                d.addCallback(lambda results: translate.postProcess(results, request.method))
-            self.deferred = d
-            d.addBoth(self._complete)
-            return d
-        else:
+        if self.deferred:
             raise ClientBusy
+
+        fun = getattr(self.client, request.method, None)
+        if not fun:
+            raise InvalidThriftRequest
+
+        self.deferred = fun(*(request.args))
+        return self.deferred.addBoth(self._complete)
 
     def abort(self):
         self.aborted = True
