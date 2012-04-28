@@ -11,9 +11,9 @@ Installation
 
 Prerequisites:
 
- * Python >= 2.4 (2.5 or later for tests)
- * Twisted 8.1.0 or later
- * Thrift (latest svn)
+* Python >= 2.4 (2.5 or later for tests)
+* Twisted 8.1.0 or later
+* Thrift (latest svn)
 
 Usage
 -----
