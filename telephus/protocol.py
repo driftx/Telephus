@@ -9,24 +9,31 @@ from telephus.cassandra.ttypes import *
 from telephus.cassandra.c08 import Cassandra
 from sys import exc_info
 
+
 class ClientBusy(Exception):
     pass
+
 
 class InvalidThriftRequest(Exception):
     pass
 
+
 # Here for backwards compatibility
 APIMismatch = translate.APIMismatch
+
 
 class ManagedThriftRequest(object):
     def __init__(self, method, *args):
         self.method = method
         self.args = args
 
+
 class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
-    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None, api_version=None):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
+    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None,
+                 api_version=None):
+        TTwisted.ThriftClientProtocol.__init__(
+            self, Cassandra.Client, iprot_factory, oprot_factory)
         self.iprot_factory = iprot_factory
         self.deferred = None
         self.aborted = False
@@ -41,14 +48,17 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
     def setupConnection(self):
         d = self.client.describe_version()
+
         def check_version(thrift_ver):
             cver = translate.thrift_api_ver_to_cassandra_ver(thrift_ver)
             if self.api_version is None:
                 self.api_version = cver
             elif self.api_version != cver:
-                raise APIMismatch("%s is exposing thrift protocol version %s -> "
-                                  "Cassandra version %s, but %s was expected"
-                                  % (self.transport.getPeer(), thrift_ver, cver, self.api_version))
+                raise APIMismatch(
+                    "%s is exposing thrift protocol version %s -> "
+                    "Cassandra version %s, but %s was expected" % (
+                        self.transport.getPeer(), thrift_ver, cver,
+                        self.api_version))
         d.addCallback(check_version)
         if self.keyspace:
             d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
@@ -63,8 +73,9 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.factory.clientSetupFailed(err)
 
     def connectionLost(self, reason=None):
-        if not self.aborted: # don't allow parent class to raise unhandled TTransport
-                             # exceptions, the manager handled our failure
+        # don't allow parent class to raise unhandled TTransport exceptions,
+        # the manager handled our failure
+        if not self.aborted:
             TTwisted.ThriftClientProtocol.connectionLost(self, reason)
         self.factory.clientGone(self)
 
@@ -81,7 +92,8 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
             else:
                 args = translate.translateArgs(request, self.api_version)
                 d = fun(*args)
-                d.addCallback(lambda results: translate.postProcess(results, request.method))
+                d.addCallback(lambda results: translate.postProcess(
+                    results, request.method))
             self.deferred = d
             d.addBoth(self._complete)
             return d
@@ -92,24 +104,31 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.aborted = True
         self.transport.loseConnection()
 
+
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
-    def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None, api_version=None):
-        ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory,
-                                             keyspace=keyspace, api_version=api_version)
+    def __init__(self, keyspace, credentials, iprot_factory,
+                 oprot_factory=None, api_version=None):
+        ManagedThriftClientProtocol.__init__(
+            self, iprot_factory, oprot_factory, keyspace=keyspace,
+            api_version=api_version)
         self.credentials = credentials
 
     def setupConnection(self):
-        d = self.client.login(AuthenticationRequest(credentials=self.credentials))
-        d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(self))
+        d = self.client.login(
+            AuthenticationRequest(credentials=self.credentials))
+        d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(
+            self))
         return d
+
 
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 45
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, keyspace=None, retries=0, credentials={}, require_api_version=None):
-        self.deferred   = defer.Deferred()
+    def __init__(self, keyspace=None, retries=0, credentials={},
+                 require_api_version=None):
+        self.deferred = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
         self._protos = []
@@ -132,7 +151,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             self.deferred = None
 
     def clientConnectionFailed(self, connector, reason):
-        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+        ReconnectingClientFactory.clientConnectionFailed(
+            self, connector, reason)
         self._errback(reason)
 
     def clientSetupFailed(self, reason):
@@ -168,7 +188,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.keyspace = keyspace
         dfrds = []
         for p in self._protos:
-            dfrds.append(p.submitRequest(ManagedThriftRequest('set_keyspace', keyspace)))
+            dfrds.append(p.submitRequest(ManagedThriftRequest(
+                'set_keyspace', keyspace)))
         return defer.gatherResults(dfrds)
 
     def login(self, credentials):
@@ -181,7 +202,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
 
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
-            if err.check(InvalidRequestException, InvalidThriftRequest) or r < 1:
+            if (err.check(InvalidRequestException, InvalidThriftRequest) or
+                r < 1):
                 if err.tb is None:
                     try:
                         raise err.value
@@ -195,9 +217,11 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 self._pending.remove(d)
             else:
                 self.queue.put((req, d, r))
+
         def reqSuccess(res, d):
             d.callback(res)
             self._pending.remove(d)
+
         def _process((request, deferred, retries)):
             if not proto in self._protos:
                 # may have disconnected while we were waiting for a request
@@ -228,4 +252,5 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             if p.transport:
                 p.transport.loseConnection()
         for d in self._pending:
-            if not d.called: d.errback(UserError(string="Shutdown requested"))
+            if not d.called:
+                d.errback(UserError(string="Shutdown requested"))

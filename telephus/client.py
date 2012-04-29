@@ -62,9 +62,10 @@ class CassandraClient(object):
             yield d
 
     @defer.inlineCallbacks
-    def _push_system_request(self,req,retries=None,block=True):
+    def _push_system_request(self, req, retries=None, block=True):
         result = yield self.manager.pushRequest(req, retries=retries)
-        if block: yield self._wait_for_schema_agreement()
+        if block:
+            yield self._wait_for_schema_agreement()
         defer.returnValue(result)
 
     @requirekwargs('key', 'column_family')
@@ -147,10 +148,11 @@ class CassandraClient(object):
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('column_family', 'expressions')
-    def get_indexed_slices(self, column_family=None, expressions=None, start_key='', column_start='',
-            column_finish='', names=None, count=100, column_count=100,
-            reverse=False, consistency=None, super_column=None,
-            retries=None):
+    def get_indexed_slices(self, column_family=None, expressions=None,
+                           start_key='', column_start='', column_finish='',
+                           names=None, count=100, column_count=100,
+                           reverse=False, consistency=None, super_column=None,
+                           retries=None):
         idx_clause = IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
@@ -263,7 +265,7 @@ class CassandraClient(object):
             if isinstance(mapping[first], dict):
                 for name in mapping:
                     cols = []
-                    for col,val in mapping[name].iteritems():
+                    for col, val in mapping[name].iteritems():
                         cols.append(Column(col, val, timestamp, ttl))
                     colsorsupers.append(SuperColumn(name=name, columns=cols))
             else:
@@ -328,43 +330,44 @@ class CassandraClient(object):
 
     def system_drop_column_family(self, cfName, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_column_family', cfName)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_drop_keyspace(self, keyspace, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_keyspace', keyspace)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     if 0:
         # these are disabled in Cassandra 0.7 right now
         def system_rename_column_family(self, oldname, newname, retries=None,
                                         block=True):
-            if block: self._wait_for_schema_agreement()
+            if block:
+                self._wait_for_schema_agreement()
             req = ManagedThriftRequest(
                 'system_rename_column_family', oldname, newname)
-            return self._push_system_request(req,retries=retries,block=block)
+            return self._push_system_request(req, retries=retries, block=block)
 
         def system_rename_keyspace(self, oldname, newname, retries=None,
                                    block=True):
             req = ManagedThriftRequest(
                 'system_rename_keyspace', oldname, newname)
-            return self._push_system_request(req,retries=retries,block=block)
+            return self._push_system_request(req, retries=retries, block=block)
 
     # TODO: make friendly
     def system_add_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_update_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_column_family', cfDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_add_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_update_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_keyspace', ksDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')
