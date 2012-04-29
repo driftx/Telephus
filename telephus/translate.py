@@ -45,5 +45,6 @@ def postProcess(results, method):
 
 def translate_describe_ks(ksdef):
     if ksdef.strategy_options and 'replication_factor' in ksdef.strategy_options:
-        ksdef.replication_factor = int(ksdef.strategy_options['replication_factor'])
+        ksdef.replication_factor = int(
+            ksdef.strategy_options['replication_factor'])
     return ksdef
