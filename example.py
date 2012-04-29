@@ -1,8 +1,10 @@
 #!/usr/bin/python
-from telephus.protocol import ManagedCassandraClientFactory
-from telephus.client import CassandraClient
-from telephus.cassandra.ttypes import ColumnPath, ColumnParent, Column, SuperColumn
 from twisted.internet import defer
+
+from telephus.cassandra.ttypes import ColumnPath, ColumnParent, Column, SuperColumn
+from telephus.client import CassandraClient
+from telephus.protocol import ManagedCassandraClientFactory
+
 
 HOST = 'localhost'
 PORT = 9160
@@ -13,6 +15,7 @@ COUNT_CF = 'Counter1'
 SUPERCOUNT_CF = 'SuperCounter1'
 colname = 'foo'
 scname = 'bar'
+
 
 @defer.inlineCallbacks
 def dostuff(client):
