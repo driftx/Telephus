@@ -1,13 +1,16 @@
 from telephus.cassandra.c07.constants import VERSION as CASSANDRA_07_VERSION
 from telephus.cassandra.c08.constants import VERSION as CASSANDRA_08_VERSION
 
+
 supported_versions = (
     ('0.7', CASSANDRA_07_VERSION),
     ('0.8', CASSANDRA_08_VERSION),
 )
 
+
 class APIMismatch(Exception):
     pass
+
 
 def thrift_api_ver_to_cassandra_ver(remoteversion):
     """
@@ -25,6 +28,7 @@ def thrift_api_ver_to_cassandra_ver(remoteversion):
     msg = 'Cassandra API version %s is not compatible with telephus' % ver
     raise APIMismatch(msg)
 
+
 def translateArgs(request, api_version):
     args = request.args
     if request.method == 'system_add_keyspace' or \
@@ -35,6 +39,7 @@ def translateArgs(request, api_version):
             args = (args[0].to08(),)
     return args
 
+
 def postProcess(results, method):
     if method == 'describe_keyspace':
         return translate_describe_ks(results)
@@ -43,7 +48,10 @@ def postProcess(results, method):
     else:
         return results
 
+
 def translate_describe_ks(ksdef):
-    if ksdef.strategy_options and 'replication_factor' in ksdef.strategy_options:
-        ksdef.replication_factor = int(ksdef.strategy_options['replication_factor'])
+    if (ksdef.strategy_options and
+        'replication_factor' in ksdef.strategy_options):
+        ksdef.replication_factor = int(
+            ksdef.strategy_options['replication_factor'])
     return ksdef
