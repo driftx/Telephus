@@ -6,7 +6,8 @@
 Quick start:
 
 >>> my_seed_nodes = ['192.168.2.14', '192.168.2.15', '192.168.2.16']
->>> mypool = CassandraClusterPool(my_seed_nodes, keyspace='MyKeyspace', pool_size=10)
+>>> mypool = CassandraClusterPool(
+...   my_seed_nodes, keyspace='MyKeyspace', pool_size=10)
 >>> mypool.startService()
 >>> mypool.get('Key12345', 'SomeCF')
 <Deferred at 0x1b2b248>
@@ -62,7 +63,9 @@ from telephus.client import CassandraClient
 from telephus.translate import (thrift_api_ver_to_cassandra_ver, translateArgs,
                                 postProcess)
 
+
 noop = lambda *a, **kw: None
+
 
 class NoKeyspacesAvailable(UserWarning):
     """
@@ -72,6 +75,7 @@ class NoKeyspacesAvailable(UserWarning):
     When Cassandra's thrift interface allows specifying null for describe_ring
     (like the underlying java interface already does), we can remove this.
     """
+
 
 class NoNodesAvailable(Exception):
     """
@@ -83,14 +87,17 @@ class NoNodesAvailable(Exception):
     handle this type of exception.
     """
 
+
 def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
-    msg = '(No candidate nodes to expand pool to target size %d from %d;' \
-          ' there are %d pending requests.' % (pooltarget, poolsize, pending_reqs)
+    msg = ('(No candidate nodes to expand pool to target size %d from %d; '
+           'there are %d pending requests.' % (
+            pooltarget, poolsize, pending_reqs))
     if waittime is None:
         msg += ')'
     else:
         msg += ' Expected candidate node retry in %.1f seconds.)' % waittime
     log.msg(msg)
+
 
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
@@ -116,6 +123,7 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
         del self.client._reqs
         del self.client
 
+
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     protocol = CassandraPoolParticipantClient
     connector = None
@@ -133,7 +141,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def __init__(self, node, service, api_version=None):
         self.node = node
-        # if self.service is None, don't bother doing anything. nobody loves us.
+        # if self.service is None, don't bother doing anything. nobody loves
+        # us.
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
@@ -215,14 +224,16 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         """
 
         d = self.my_describe_version()
+
         def check_version(thrift_ver):
             cassver = thrift_api_ver_to_cassandra_ver(thrift_ver)
             if self.api_version is None:
                 self.api_version = cassver
             elif self.api_version != cassver:
-                raise APIMismatch("%s is exposing thrift protocol version %s -> "
-                                  "Cassandra version %s, but %s was expected"
-                                  % (self.node, thrift_ver, cassver, self.api_version))
+                raise APIMismatch(
+                    "%s is exposing thrift protocol version %s -> "
+                    "Cassandra version %s, but %s was expected" % (
+                        self.node, thrift_ver, cassver, self.api_version))
         d.addCallback(check_version)
         if creds is not None:
             d.addCallback(lambda _: self.my_login(creds))
@@ -237,7 +248,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def my_login(self, creds):
         return self.execute(
-            ManagedThriftRequest('login', AuthenticationRequest(credentials=creds))
+            ManagedThriftRequest(
+                'login', AuthenticationRequest(credentials=creds))
         )
 
     def my_set_keyspace(self, keyspace):
@@ -248,7 +260,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
-        d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
+        d.addCallback(lambda k: self.execute(ManagedThriftRequest(
+            'describe_ring', k)))
+
         def suppress_no_keyspaces_error(f):
             f.trap(NoKeyspacesAvailable)
             return ()
@@ -267,6 +281,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         of getting a valid ring view. Can't use 'system' or null.
         """
         d = self.my_describe_keyspaces()
+
         def pick_non_system(klist):
             for k in klist:
                 if k.name != 'system':
@@ -286,11 +301,12 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     def execute(self, req, keyspace=None):
         if self.my_proto is None:
             return defer.errback(error.ConnectionClosed(
-                                    'Lost connection before %s request could be made'
-                                    % (req.method,)))
+                'Lost connection before %s request could be made' % (
+                    req.method,)))
         method = getattr(self.my_proto.client, req.method, None)
         if method is None:
-            raise InvalidThriftRequest("don't understand %s request" % req.method)
+            raise InvalidThriftRequest(
+                "don't understand %s request" % req.method)
 
         d = defer.succeed(0)
 
@@ -326,8 +342,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     def process_request_error(self, err, req, keyspace, req_d, retries):
         self.logstate('process_request_error: %s, retries=%d' % (err, retries))
         self.last_error = err
-        if retries > 0 and self.service is not None \
-        and err.check(*self.service.retryables):
+        if (retries > 0 and self.service is not None and
+            err.check(*self.service.retryables)):
             self.logstate('-- resubmit --')
             assert self.jobphase is None, \
                     'Factory might retry its own fatal error'
@@ -401,6 +417,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             log.msg('CPRF 0x%x (node %s) [%s]: %s'
                     % (id(self), self.node, self.jobphase, msg))
 
+
 class CassandraKeyspaceConnection:
     """
     Glue class which acts as a manager for CassandraClient but passes requests
@@ -414,13 +431,16 @@ class CassandraKeyspaceConnection:
         self.keyspace = keyspace
 
     def pushRequest(self, req, retries=None):
-        return self.pool.pushRequest(req, retries=retries, keyspace=self.keyspace)
+        return self.pool.pushRequest(
+            req, retries=retries, keyspace=self.keyspace)
 
     def set_keyspace(self, keyspace):
-        raise RuntimeError("Don't call set_keyspace on a CassandraKeyspaceConnection")
+        raise RuntimeError("Don't call set_keyspace on a "
+                           "CassandraKeyspaceConnection")
 
     def login(self, credentials):
         return self.pool.login(credentials)
+
 
 class CassandraNode:
     """
@@ -459,7 +479,8 @@ class CassandraNode:
 
     def record_hist(self, value):
         now = time()
-        if self.history and self.history[0][0] < (now - self.history_interval * 2):
+        if (self.history and
+            self.history[0][0] < (now - self.history_interval * 2)):
             # it has been 2x history_interval; prune history
             cutoff = now - self.history_interval
             for n, (tstamp, hval) in enumerate(self.history):
@@ -483,7 +504,8 @@ class CassandraNode:
         if is_notable:
             newdelay = min(self.reconnect_delay * self.factor, self.max_delay)
             if self.jitter:
-                newdelay = random.normalvariate(newdelay, newdelay * self.jitter)
+                newdelay = random.normalvariate(
+                    newdelay, newdelay * self.jitter)
             self.reconnect_delay = newdelay
             self.can_reconnect_at = time() + newdelay
         else:
@@ -521,6 +543,7 @@ class CassandraNode:
 
     def __hash__(self):
         return hash((self.__class__, self.host, self.port))
+
 
 class CassandraClusterPool(service.Service, object):
     """
@@ -714,7 +737,8 @@ class CassandraClusterPool(service.Service, object):
 
     def stopService(self):
         service.Service.stopService(self)
-        if self.future_fill_pool is not None and self.future_fill_pool.active():
+        if (self.future_fill_pool is not None and
+            self.future_fill_pool.active()):
             self.future_fill_pool.cancel()
         for factory in self.connectors.copy():
             factory.service = None
@@ -758,9 +782,7 @@ class CassandraClusterPool(service.Service, object):
         else:
             self.log(repr(_stuff), **kw)
 
-
     # methods for inspecting current connection state
-
     def all_connectors(self):
         return self.connectors.copy()
 
@@ -807,7 +829,6 @@ class CassandraClusterPool(service.Service, object):
     def num_pending_conns_to(self, node):
         return len(self.all_pending_conns_to(node))
 
-
     def add_connection_score(self, node):
         """
         Return a numeric value that determines this node's score for adding
@@ -843,7 +864,8 @@ class CassandraClusterPool(service.Service, object):
 
         if newsize < 0:
             raise ValueError("pool size must be nonnegative")
-        self.log("Adjust pool size from %d to %d." % (self.target_pool_size, newsize))
+        self.log("Adjust pool size from %d to %d." % (
+            self.target_pool_size, newsize))
         self.target_pool_size = newsize
         self.kill_excess_pending_conns()
         self.kill_excess_conns()
@@ -876,7 +898,8 @@ class CassandraClusterPool(service.Service, object):
             pending_conns = self.all_pending_conns()
             if len(pending_conns) == 0:
                 break
-            yield max(pending_conns, key=lambda f: self.num_connectors_to(f.node))
+            yield max(
+                pending_conns, key=lambda f: self.num_connectors_to(f.node))
 
     def choose_conns_to_kill(self):
         nodegetter = lambda f: f.node
@@ -885,9 +908,12 @@ class CassandraClusterPool(service.Service, object):
             active_conns = self.all_active_conns()
             if len(active_conns) == 0:
                 break
-            nodes_and_conns = groupby(sorted(active_conns, key=nodegetter), nodegetter)
-            nodes_and_counts = ((n, len(list(conns))) for (n, conns) in nodes_and_conns)
-            bestnode, bestcount = max(nodes_and_counts, key=lambda (n,count): count)
+            nodes_and_conns = groupby(
+                sorted(active_conns, key=nodegetter), nodegetter)
+            nodes_and_counts = (
+                (n, len(list(conns))) for (n, conns) in nodes_and_conns)
+            bestnode, bestcount = max(
+                nodes_and_counts, key=lambda (n, count): count)
             # should be safe from IndexError
             yield self.all_active_conns_to(bestnode)[0]
 
@@ -922,16 +948,18 @@ class CassandraClusterPool(service.Service, object):
         if need <= 0:
             return
         try:
-            for num, node in izip(xrange(need), self.choose_nodes_to_connect()):
+            for num, node in izip(
+                xrange(need), self.choose_nodes_to_connect()):
                 self.make_conn(node)
         except NoNodesAvailable, e:
             waittime = e.args[0]
+            if waittime == float('Inf'):
+                waittime = None
             pending_requests = len(self.request_queue.pending)
             if self.on_insufficient_nodes:
-                self.on_insufficient_nodes(self.num_active_conns(),
-                                           self.target_pool_size,
-                                           pending_requests,
-                                           waittime if waittime != float('Inf') else None)
+                self.on_insufficient_nodes(
+                    self.num_active_conns(), self.target_pool_size,
+                    pending_requests, waittime)
             self.schedule_future_fill_pool(e.args[0])
             if self.num_connectors() == 0 and pending_requests > 0:
                 if self.on_insufficient_conns:
@@ -942,14 +970,15 @@ class CassandraClusterPool(service.Service, object):
         if seconds == float('Inf'):
             return
         if self.future_fill_pool is None or not self.future_fill_pool.active():
-            self.future_fill_pool = self.reactor.callLater(seconds, self.fill_pool)
+            self.future_fill_pool = self.reactor.callLater(
+                seconds, self.fill_pool)
         else:
             self.future_fill_pool.reset(seconds)
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
         f = self.conn_factory(node, self, self.require_api_version)
-        bindaddr=self.bind_address
+        bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
         self.reactor.connectTCP(node.host, node.port, f,
@@ -995,9 +1024,11 @@ class CassandraClusterPool(service.Service, object):
 
     def client_conn_lost(self, f, reason):
         if reason.check(error.ConnectionDone):
-            self.log('Thrift pool connection to %s failed (cleanly)' % (f.node,))
+            self.log(
+                'Thrift pool connection to %s failed (cleanly)' % (f.node,))
         else:
-            self.err(reason, 'Thrift pool connection to %s was lost' % (f.node,))
+            self.err(
+                reason, 'Thrift pool connection to %s was lost' % (f.node,))
         if f.last_error is None or f.last_error.check(*self.retryables):
             self.log('Retrying connection right away')
             self.remove_good_conn(f)
@@ -1039,7 +1070,8 @@ class CassandraClusterPool(service.Service, object):
             # it's already been scooped up
             pass
         else:
-            self.request_queue.pending.insert(0, (req, keyspace, req_d, retries))
+            self.request_queue.pending.insert(
+                0, (req, keyspace, req_d, retries))
 
     def set_keyspace(self, keyspace):
         """
@@ -1098,6 +1130,7 @@ class CassandraClusterPool(service.Service, object):
 
     def __str__(self):
         return '<%s: [%d nodes known] [%d connections]>' \
-               % (self.__class__.__name__, len(self.nodes), self.num_active_conns())
+               % (self.__class__.__name__, len(self.nodes),
+                  self.num_active_conns())
 
     __repr__ = __str__
