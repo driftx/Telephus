@@ -61,6 +61,7 @@ from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
 from telephus.cassandra import ttypes, Cassandra
 from telephus.client import CassandraClient
+from telephus._sasl import ThriftSASLClientProtocol
 
 ConsistencyLevel = ttypes.ConsistencyLevel
 
@@ -94,6 +95,7 @@ def lame_log_insufficient_nodes(poolsize, pooltarget, pending_reqs, waittime):
         msg += ' Expected candidate node retry in %.1f seconds.)' % waittime
     log.msg(msg)
 
+
 class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
@@ -118,6 +120,38 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
         del self.client._reqs
         del self.client
 
+
+class CassandraPoolParticipantSASLClient(ThriftSASLClientProtocol):
+    thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
+
+    def __init__(self):
+        ThriftSASLClientProtocol.__init__(self, Cassandra.Client,
+                                          self.thriftFactory())
+        # shouldn't create sasl client via the ThriftSASLClientProtocol
+        # constructor yet, as we don't have host-specific creds yet
+
+    @defer.inlineCallbacks
+    def connectionMade(self):
+        sasl_kwargs = yield defer.maybeDeferred(
+                self.sasl_cred_factory, self.transport.host, self.transport.port)
+        self.createSASLClient(**sasl_kwargs)
+        yield ThriftSASLClientProtocol.connectionMade(self)
+        self.factory.clientConnectionMade(self)
+
+    def connectionLost(self, reason):
+        # the TTwisted version of this call does not account for the
+        # possibility of other things happening during the errback.
+        tex = TTransport.TTransportException(
+            type=TTransport.TTransportException.END_OF_FILE,
+            message='Connection closed (%s)' % reason)
+        while self.client._reqs:
+            k = iter(self.client._reqs).next()
+            v = self.client._reqs.pop(k)
+            v.errback(tex)
+        del self.client._reqs
+        del self.client
+
+
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     connector = None
     last_error = None
@@ -132,7 +166,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service):
+    def __init__(self, node, service, sasl_cred_factory=None):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
@@ -593,7 +627,7 @@ class CassandraClusterPool(service.Service, object):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None):
+                 log_cb=log.msg, reactor=None, sasl_cred_factory=None):
         """
         Initialize a CassandraClusterPool.
 

@@ -33,9 +33,10 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
 
         self._startup_deferred = None
         self.client = None
+        self.createSASLClient(sasl_host, sasl_service, mechanism, **sasl_kwargs)
 
-        self.sasl = SASLClient(sasl_host, sasl_service, mechanism,
-                **sasl_kwargs)
+    def createSASLClient(self, sasl_host, sasl_service, mechanism, **kwargs):
+        self.sasl = SASLClient(sasl_host, sasl_service, mechanism, **kwargs)
 
     def dispatch(self, msg):
         encoded = self.sasl.wrap(msg)
