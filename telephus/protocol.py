@@ -8,38 +8,56 @@ from twisted.internet.error import UserError
 from twisted.python import failure
 
 from telephus.cassandra import Cassandra, ttypes
+from telephus._sasl import ThriftSASLClientProtocol
 
 class ClientBusy(Exception):
     pass
 
+
 class InvalidThriftRequest(Exception):
     pass
+
 
 class ManagedThriftRequest(object):
     def __init__(self, method, *args):
         self.method = method
         self.args = args
 
-class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
-    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
+class BaseThriftClientProtocol(object):
+
+    _parent_protocol = None
+
+    def __init__(self, iprot_factory, oprot_factory, keyspace):
         self.iprot_factory = iprot_factory
         self.deferred = None
         self.aborted = False
         self.keyspace = keyspace
 
+    @defer.inlineCallbacks
     def connectionMade(self):
-        TTwisted.ThriftClientProtocol.connectionMade(self)
+        try:
+            yield defer.maybeDeferred(self._parent_protocol.connectionMade, self)
+        except Exception:
+            self.transport.loseConnection()
+            raise
+
+        yield self.started
         self.client.protocol = self
         self.setupConnection() \
             .addCallbacks(self.setupComplete, self.setupFailed)
 
+    def connectionLost(self, reason=None):
+        if not self.aborted: # don't allow parent class to raise unhandled TTransport
+                             # exceptions, the manager handled our failure
+            self._parent_protocol.connectionLost(self, reason)
+        self.factory.clientGone(self)
+
     def setupConnection(self):
-        d = self.client.describe_version()
         if self.keyspace:
-            d.addCallback(lambda _: self.client.set_keyspace(self.keyspace))
-        return d
+            return self.client.set_keyspace(self.keyspace)
+        else:
+            return defer.succeed(None)
 
     def setupComplete(self, res=None):
         self.factory.resetDelay()
@@ -48,12 +66,6 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     def setupFailed(self, err):
         self.transport.loseConnection()
         self.factory.clientSetupFailed(err)
-
-    def connectionLost(self, reason=None):
-        if not self.aborted: # don't allow parent class to raise unhandled TTransport
-                             # exceptions, the manager handled our failure
-            TTwisted.ThriftClientProtocol.connectionLost(self, reason)
-        self.factory.clientGone(self)
 
     def _complete(self, res=None):
         self.deferred = None
@@ -75,7 +87,18 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
         self.aborted = True
         self.transport.loseConnection()
 
+
+class ManagedThriftClientProtocol(BaseThriftClientProtocol, TTwisted.ThriftClientProtocol):
+
+    _parent_protocol = TTwisted.ThriftClientProtocol
+
+    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
+        BaseThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
+
+
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
+
     def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None, **kwargs):
         ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory,
                                              keyspace=keyspace, **kwargs)
@@ -87,13 +110,24 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(self))
         return d
 
+
+class SASLThriftClientProtocol(BaseThriftClientProtocol, ThriftSASLClientProtocol):
+
+    _parent_protocol = ThriftSASLClientProtocol
+
+    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None, **sasl_kwargs):
+        ThriftSASLClientProtocol.__init__(self, Cassandra.Client,
+                iprot_factory, oprot_factory, **sasl_kwargs)
+        BaseThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
+
+
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
     maxDelay = 45
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
     protocol = ManagedThriftClientProtocol
 
-    def __init__(self, keyspace=None, retries=0, credentials={}):
-        self.deferred   = defer.Deferred()
+    def __init__(self, keyspace=None, retries=0, credentials=None, sasl_kwargs=None):
+        self.deferred = defer.Deferred()
         self.queue = defer.DeferredQueue()
         self.continueTrying = True
         self._protos = []
@@ -101,8 +135,11 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.request_retries = retries
         self.keyspace = keyspace
         self.credentials = credentials
+        self.sasl_kwargs = sasl_kwargs
         if credentials:
             self.protocol = AuthenticatedThriftClientProtocol
+        elif sasl_kwargs:
+            self.protocol = SASLThriftClientProtocol
 
     def _errback(self, reason=None):
         if self.deferred:
@@ -132,6 +169,10 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             p = self.protocol(self.keyspace,
                               self.credentials,
                               self.thriftFactory())
+        elif self.sasl_kwargs:
+            p = self.protocol(self.thriftFactory(),
+                              keyspace=self.keyspace,
+                              **self.sasl_kwargs)
         else:
             p = self.protocol(self.thriftFactory(),
                               keyspace=self.keyspace)
@@ -176,9 +217,11 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                 self._pending.remove(d)
             else:
                 self.queue.put((req, d, r))
+
         def reqSuccess(res, d):
             d.callback(res)
             self._pending.remove(d)
+
         def _process((request, deferred, retries)):
             if not proto in self._protos:
                 # may have disconnected while we were waiting for a request
@@ -194,6 +237,7 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
                                reqError,
                                callbackArgs=[deferred],
                                errbackArgs=[request, deferred, retries])
+
         return self.queue.get().addCallback(_process)
 
     def pushRequest(self, request, retries=None):
@@ -209,4 +253,5 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             if p.transport:
                 p.transport.loseConnection()
         for d in self._pending:
-            if not d.called: d.errback(UserError(string="Shutdown requested"))
+            if not d.called:
+                d.errback(UserError(string="Shutdown requested"))

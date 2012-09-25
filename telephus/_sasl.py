@@ -5,11 +5,11 @@ from thrift.transport import TTransport
 
 from twisted.internet import defer
 from twisted.protocols import basic
-from twisted.internet.protocol import connectionDone, Protocol, _PauseableMixin
+from twisted.internet.protocol import connectionDone, Protocol
 
 from puresasl.client import SASLClient
 
-class ThriftSASLClientProtocol(Protocol, _PauseableMixin):
+class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
 
     START = 1
     OK = 2
@@ -32,6 +32,7 @@ class ThriftSASLClientProtocol(Protocol, _PauseableMixin):
         self.started = defer.Deferred()
 
         self._startup_deferred = None
+        self.client = None
 
         self.sasl = SASLClient(sasl_host, sasl_service, mechanism,
                 **sasl_kwargs)
@@ -58,13 +59,14 @@ class ThriftSASLClientProtocol(Protocol, _PauseableMixin):
                 self._sendSASLMessage(self.OK, self.sasl.process(challenge))
             elif status == self.COMPLETE:
                 if not self.sasl.complete:
-                    raise TTransport.TTransportException("The server erroneously indicated "
-                            "that SASL negotiation was complete")
+                    msg = "The server erroneously indicated that SASL " \
+                          "negotiation was complete"
+                    raise TTransport.TTransportException(msg, message=msg)
                 else:
                     break
             else:
-                raise TTransport.TTransportException("Bad SASL negotiation status: %d (%s)"
-                        % (status, challenge))
+                msg = "Bad SASL negotiation status: %d (%s)" % (status, challenge)
+                raise TTransport.TTransportException(msg, message=msg)
 
         self._startup_deferred = None
         tmo = TCallbackTransport(self.dispatch)
@@ -72,30 +74,32 @@ class ThriftSASLClientProtocol(Protocol, _PauseableMixin):
         self.started.callback(self.client)
 
     def _sendSASLMessage(self, status, body):
+        if body is None:
+            body = ""
         header = struct.pack(">BI", status, len(body))
         self.transport.write(header + body)
-        self.transport.flush()
 
     def _receiveSASLMessage(self):
         self._startup_deferred = defer.Deferred() \
                 .addCallback(self._gotSASLMessage)
         return self._startup_deferred
 
-    def _gotSASLMessage(self, data):
-        header = self.transport.readAll(5)
+    def _gotSASLMessage(self, tmemorybuff):
+        header = tmemorybuff.readAll(5)
         status, length = struct.unpack(">BI", header)
         if length > 0:
-            payload = self.transport.readAll(length)
+            payload = tmemorybuff.readAll(length)
         else:
             payload = ""
         return status, payload
 
     def connectionLost(self, reason=connectionDone):
-        for k, v in self.client._reqs.iteritems():
-            tex = TTransport.TTransportException(
-                type=TTransport.TTransportException.END_OF_FILE,
-                message='Connection closed')
-            v.errback(tex)
+        if self.client:
+            for k, v in self.client._reqs.iteritems():
+                tex = TTransport.TTransportException(
+                    type=TTransport.TTransportException.END_OF_FILE,
+                    message='Connection closed')
+                v.errback(tex)
 
     def dataReceived(self, data):
         tr = TTransport.TMemoryBuffer(data)
