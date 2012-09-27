@@ -6,6 +6,7 @@ from thrift.transport import TTransport
 from twisted.internet import defer
 from twisted.protocols import basic
 from twisted.internet.protocol import connectionDone, Protocol
+from twisted.internet.threads import deferToThread
 
 from puresasl.client import SASLClient
 
@@ -33,7 +34,9 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
 
         self._startup_deferred = None
         self.client = None
-        self.createSASLClient(sasl_host, sasl_service, mechanism, **sasl_kwargs)
+
+        if sasl_host is not None:
+            self.createSASLClient(sasl_host, sasl_service, mechanism, **sasl_kwargs)
 
     def createSASLClient(self, sasl_host, sasl_service, mechanism, **kwargs):
         self.sasl = SASLClient(sasl_host, sasl_service, mechanism, **kwargs)
@@ -52,12 +55,14 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
     @defer.inlineCallbacks
     def connectionMade(self):
         self._sendSASLMessage(self.START, self.sasl.mechanism)
-        self._sendSASLMessage(self.OK, self.sasl.process())
+        initial_message = yield deferToThread(self.sasl.process)
+        self._sendSASLMessage(self.OK, initial_message)
 
         while True:
             status, challenge = yield self._receiveSASLMessage()
             if status == self.OK:
-                self._sendSASLMessage(self.OK, self.sasl.process(challenge))
+                response = yield deferToThread(self.sasl.process, challenge)
+                self._sendSASLMessage(self.OK, response)
             elif status == self.COMPLETE:
                 if not self.sasl.complete:
                     msg = "The server erroneously indicated that SASL " \
