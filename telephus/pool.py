@@ -124,19 +124,25 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
 class CassandraPoolParticipantSASLClient(ThriftSASLClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
-    def __init__(self):
+    def __init__(self, sasl_cred_factory):
         ThriftSASLClientProtocol.__init__(self, Cassandra.Client,
                                           self.thriftFactory())
-        # shouldn't create sasl client via the ThriftSASLClientProtocol
-        # constructor yet, as we don't have host-specific creds yet
+        self.sasl_cred_factory = sasl_cred_factory
 
     @defer.inlineCallbacks
     def connectionMade(self):
+        # Get host-specific creds so we can properly # create the sasl client
+        peer = self.transport.getPeer()
         sasl_kwargs = yield defer.maybeDeferred(
-                self.sasl_cred_factory, self.transport.host, self.transport.port)
+                self.sasl_cred_factory, peer.host, peer.port)
         self.createSASLClient(**sasl_kwargs)
-        yield ThriftSASLClientProtocol.connectionMade(self)
-        self.factory.clientConnectionMade(self)
+        try:
+            yield ThriftSASLClientProtocol.connectionMade(self)
+        except Exception, exc:
+            self.transport.loseConnection()
+            self.factory.clientConnectionFailed(self.factory.connector, failure.Failure(exc))
+        else:
+            self.factory.clientConnectionMade(self)
 
     def connectionLost(self, reason):
         # the TTwisted version of this call does not account for the
@@ -144,12 +150,13 @@ class CassandraPoolParticipantSASLClient(ThriftSASLClientProtocol):
         tex = TTransport.TTransportException(
             type=TTransport.TTransportException.END_OF_FILE,
             message='Connection closed (%s)' % reason)
-        while self.client._reqs:
-            k = iter(self.client._reqs).next()
-            v = self.client._reqs.pop(k)
-            v.errback(tex)
-        del self.client._reqs
-        del self.client
+        if self.client:
+            while self.client._reqs:
+                k = iter(self.client._reqs).next()
+                v = self.client._reqs.pop(k)
+                v.errback(tex)
+            del self.client._reqs
+            del self.client
 
 
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
@@ -172,7 +179,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
-        self.protocol = partial(CassandraPoolParticipantClient)
+        if not sasl_cred_factory:
+            self.protocol = partial(CassandraPoolParticipantClient)
+        else:
+            self.protocol = partial(CassandraPoolParticipantSASLClient, sasl_cred_factory)
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
@@ -684,6 +694,7 @@ class CassandraClusterPool(service.Service, object):
         self.bind_address = bind_address
         self.keyspace = keyspace
         self.creds = creds
+        self.sasl_cred_factory = sasl_cred_factory
         self.request_queue = defer.DeferredQueue()
         self.future_fill_pool = None
         self.removed_nodes = set()
@@ -971,7 +982,7 @@ class CassandraClusterPool(service.Service, object):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self)
+        f = self.conn_factory(node, self, self.sasl_cred_factory)
         bindaddr=self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
