@@ -61,8 +61,8 @@ def setup_schema(client):
 @defer.inlineCallbacks
 def main():
     sasl_kwargs = {
-            "sasl_host": "thobbs-laptop2",
-            "sasl_service": "host",
+            "host": "thobbs-laptop2",
+            "service": "host",
             "mechanism": "GSSAPI"}
     f = ManagedCassandraClientFactory(keyspace='system', sasl_kwargs=sasl_kwargs)
     reactor.connectTCP(HOST, PORT, f)

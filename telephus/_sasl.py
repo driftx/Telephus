@@ -21,7 +21,7 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
     MAX_LENGTH = 2 ** 31 - 1
 
     def __init__(self, client_class, iprot_factory, oprot_factory=None,
-            sasl_host=None, sasl_service=None, mechanism='GSSAPI', **sasl_kwargs):
+            host=None, service=None, mechanism='GSSAPI', **sasl_kwargs):
         self._client_class = client_class
         self._iprot_factory = iprot_factory
         if oprot_factory is None:
@@ -35,11 +35,11 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
         self._startup_deferred = None
         self.client = None
 
-        if sasl_host is not None:
-            self.createSASLClient(sasl_host, sasl_service, mechanism, **sasl_kwargs)
+        if host is not None:
+            self.createSASLClient(host, service, mechanism, **sasl_kwargs)
 
-    def createSASLClient(self, sasl_host, sasl_service, mechanism, **kwargs):
-        self.sasl = SASLClient(sasl_host, sasl_service, mechanism, **kwargs)
+    def createSASLClient(self, host, service, mechanism, **kwargs):
+        self.sasl = SASLClient(host, service, mechanism, **kwargs)
 
     def dispatch(self, msg):
         encoded = self.sasl.wrap(msg)
