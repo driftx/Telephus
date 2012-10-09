@@ -680,6 +680,12 @@ class CassandraClusterPool(service.Service, object):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
+
+        @param sasl_cred_factory: A callable which, when called with two
+            parameters, a host and port, returns a dictionary of keyword
+            arguments to be used for the L{puresasl.client.SASLClient}
+            constructor. If supplied, the ThriftSASLClientProtocol will
+            be used.
         """
 
         self.seed_list = list(seed_list)
