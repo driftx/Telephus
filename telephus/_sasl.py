@@ -114,8 +114,11 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
             self._startup_deferred.callback(tr)
             return
 
-        header = tr.readAll(8)[4:]  # the frame length is duped
-        length, = struct.unpack('!i', header)
+        # the frame length is duped, but if we try to read both at once, we'll
+        # occassionally get EOFErrors
+        outer_length = tr.readAll(4)
+        inner_length = tr.readAll(4)
+        length, = struct.unpack('!i', inner_length)
         encoded = tr.readAll(length)
         tr = TTransport.TMemoryBuffer(self.sasl.unwrap(encoded))
 
