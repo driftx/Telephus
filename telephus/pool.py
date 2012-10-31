@@ -235,7 +235,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace == 'system':
+        if keyspace is None or keyspace == 'system' or keyspace == 'system_traces':
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
@@ -260,7 +260,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         d = self.my_describe_keyspaces()
         def pick_non_system(klist):
             for k in klist:
-                if k.name != 'system':
+                if k.name != 'system' and k.name != 'system_traces':
                     return k.name
             err = NoKeyspacesAvailable("Can't gather information about the "
                                        "Cassandra ring; no non-system "
