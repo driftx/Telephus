@@ -24,11 +24,14 @@ class ManagedThriftRequest(object):
         self.args = args
 
 
-class BaseThriftClientProtocol(object):
+class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
-    _parent_protocol = None
+    # used for connectionMade() and connectionLost(), change these for
+    # custom behavior
+    _parent_protocol = TTwisted.ThriftClientProtocol
 
-    def __init__(self, iprot_factory, oprot_factory, keyspace):
+    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
         self.iprot_factory = iprot_factory
         self.deferred = None
         self.aborted = False
@@ -42,14 +45,19 @@ class BaseThriftClientProtocol(object):
             self.transport.loseConnection()
             raise
 
+        # self.started is created and fired by ThriftClientProtocol
         yield self.started
+
+        # self.client is created in ThriftClientProtocol.connectionMade()
         self.client.protocol = self
+
         self.setupConnection() \
             .addCallbacks(self.setupComplete, self.setupFailed)
 
     def connectionLost(self, reason=None):
-        if not self.aborted: # don't allow parent class to raise unhandled TTransport
-                             # exceptions, the manager handled our failure
+        if not self.aborted:
+            # don't allow parent class to raise unhandled TTransport
+            # exceptions, the manager handled our failure
             self._parent_protocol.connectionLost(self, reason)
         self.factory.clientGone(self)
 
@@ -88,15 +96,6 @@ class BaseThriftClientProtocol(object):
         self.transport.loseConnection()
 
 
-class ManagedThriftClientProtocol(BaseThriftClientProtocol, TTwisted.ThriftClientProtocol):
-
-    _parent_protocol = TTwisted.ThriftClientProtocol
-
-    def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
-        BaseThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
-
-
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
 
     def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None, **kwargs):
@@ -111,14 +110,14 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         return d
 
 
-class SASLThriftClientProtocol(BaseThriftClientProtocol, ThriftSASLClientProtocol):
+class SASLThriftClientProtocol(ThriftSASLClientProtocol, ManagedThriftClientProtocol):
 
     _parent_protocol = ThriftSASLClientProtocol
 
     def __init__(self, iprot_factory, oprot_factory=None, keyspace=None, **sasl_kwargs):
         ThriftSASLClientProtocol.__init__(self, Cassandra.Client,
                 iprot_factory, oprot_factory, **sasl_kwargs)
-        BaseThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
+        ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
 
 
 class ManagedCassandraClientFactory(ReconnectingClientFactory):

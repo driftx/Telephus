@@ -1,16 +1,15 @@
 import struct
 
-from thrift.transport.TTwisted import TCallbackTransport
-from thrift.transport import TTransport
+from thrift.transport.TTwisted import ThriftClientProtocol
+from thrift.transport.TTransport import TTransportException
 
 from twisted.internet import defer
-from twisted.protocols import basic
-from twisted.internet.protocol import connectionDone, Protocol
+from twisted.internet.protocol import connectionDone
 from twisted.internet.threads import deferToThread
 
 from puresasl.client import SASLClient
 
-class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
+class ThriftSASLClientProtocol(ThriftClientProtocol):
 
     START = 1
     OK = 2
@@ -22,17 +21,10 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
 
     def __init__(self, client_class, iprot_factory, oprot_factory=None,
             host=None, service=None, mechanism='GSSAPI', **sasl_kwargs):
-        self._client_class = client_class
-        self._iprot_factory = iprot_factory
-        if oprot_factory is None:
-            self._oprot_factory = iprot_factory
-        else:
-            self._oprot_factory = oprot_factory
+        ThriftClientProtocol.__init__(self, client_class, iprot_factory, oprot_factory)
 
-        self.recv_map = {}
-        self.started = defer.Deferred()
-
-        self._startup_deferred = None
+        self._sasl_negotiation_deferred = None
+        self._sasl_negotiation_status = None
         self.client = None
 
         if host is not None:
@@ -43,14 +35,8 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
 
     def dispatch(self, msg):
         encoded = self.sasl.wrap(msg)
-        if len(encoded) >= self.MAX_LENGTH:
-            raise basic.StringTooLongError(
-                "Try to send %s bytes whereas maximum is %s" % (
-                len(encoded), self.MAX_LENGTH))
-
-        inner_str = struct.pack('!i', len(encoded)) + encoded
-        self.transport.write(
-            struct.pack('!i', len(inner_str)) + inner_str)
+        len_and_encoded = ''.join((struct.pack('!i', len(encoded)), encoded))
+        ThriftClientProtocol.dispatch(self, len_and_encoded)
 
     @defer.inlineCallbacks
     def connectionMade(self):
@@ -67,17 +53,15 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
                 if not self.sasl.complete:
                     msg = "The server erroneously indicated that SASL " \
                           "negotiation was complete"
-                    raise TTransport.TTransportException(msg, message=msg)
+                    raise TTransportException(msg, message=msg)
                 else:
                     break
             else:
                 msg = "Bad SASL negotiation status: %d (%s)" % (status, challenge)
-                raise TTransport.TTransportException(msg, message=msg)
+                raise TTransportException(msg, message=msg)
 
-        self._startup_deferred = None
-        tmo = TCallbackTransport(self.dispatch)
-        self.client = self._client_class(tmo, self._oprot_factory)
-        self.started.callback(self.client)
+        self._sasl_negotiation_deferred = None
+        ThriftClientProtocol.connectionMade(self)
 
     def _sendSASLMessage(self, status, body):
         if body is None:
@@ -86,49 +70,30 @@ class ThriftSASLClientProtocol(Protocol, basic._PauseableMixin):
         self.transport.write(header + body)
 
     def _receiveSASLMessage(self):
-        self._startup_deferred = defer.Deferred() \
-                .addCallback(self._gotSASLMessage)
-        return self._startup_deferred
-
-    def _gotSASLMessage(self, tmemorybuff):
-        header = tmemorybuff.readAll(5)
-        status, length = struct.unpack(">BI", header)
-        if length > 0:
-            payload = tmemorybuff.readAll(length)
-        else:
-            payload = ""
-        return status, payload
+        self._sasl_negotiation_deferred = defer.Deferred()
+        self._sasl_negotiation_status = None
+        return self._sasl_negotiation_deferred
 
     def connectionLost(self, reason=connectionDone):
         if self.client:
-            for k, v in self.client._reqs.iteritems():
-                tex = TTransport.TTransportException(
-                    type=TTransport.TTransportException.END_OF_FILE,
-                    message='Connection closed')
-                v.errback(tex)
+            ThriftClientProtocol.connectionLost(self, reason)
 
     def dataReceived(self, data):
-        tr = TTransport.TMemoryBuffer(data)
+        if self._sasl_negotiation_deferred:
+            # we got a sasl challenge in the format (status, length, challenge)
+            # save the status, let IntNStringReceiver piece the challenge data together
+            self._sasl_negotiation_status, = struct.unpack("B", data[0])
+            ThriftClientProtocol.dataReceived(self, data[1:])
+        else:
+            # normal frame, let IntNStringReceiver piece it together
+            ThriftClientProtocol.dataReceived(self, data)
 
-        if self._startup_deferred:
-            self._startup_deferred.callback(tr)
-            return
-
-        # the frame length is duped, but if we try to read both at once, we'll
-        # occassionally get EOFErrors
-        outer_length = tr.readAll(4)
-        inner_length = tr.readAll(4)
-        length, = struct.unpack('!i', inner_length)
-        encoded = tr.readAll(length)
-        tr = TTransport.TMemoryBuffer(self.sasl.unwrap(encoded))
-
-        iprot = self._iprot_factory.getProtocol(tr)
-        (fname, mtype, rseqid) = iprot.readMessageBegin()
-
-        try:
-            method = self.recv_map[fname]
-        except KeyError:
-            method = getattr(self.client, 'recv_' + fname)
-            self.recv_map[fname] = method
-
-        method(iprot, mtype, rseqid)
+    def stringReceived(self, frame):
+        if self._sasl_negotiation_deferred:
+            # the frame is just a SASL challenge
+            response = (self._sasl_negotiation_status, frame)
+            self._sasl_negotiation_deferred.callback(response)
+        else:
+            # there's a second 4 byte length prefix inside the frame
+            decoded_frame = self.sasl.unwrap(frame[4:])
+            ThriftClientProtocol.stringReceived(self, decoded_frame)
