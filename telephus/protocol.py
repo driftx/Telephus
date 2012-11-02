@@ -110,7 +110,7 @@ class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
         return d
 
 
-class SASLThriftClientProtocol(ThriftSASLClientProtocol, ManagedThriftClientProtocol):
+class SASLThriftClientProtocol(ManagedThriftClientProtocol, ThriftSASLClientProtocol):
 
     _parent_protocol = ThriftSASLClientProtocol
 
@@ -118,6 +118,10 @@ class SASLThriftClientProtocol(ThriftSASLClientProtocol, ManagedThriftClientProt
         ThriftSASLClientProtocol.__init__(self, Cassandra.Client,
                 iprot_factory, oprot_factory, **sasl_kwargs)
         ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory, keyspace)
+
+    dataReceived = ThriftSASLClientProtocol.dataReceived
+    stringReceived = ThriftSASLClientProtocol.stringReceived
+    dispatch = ThriftSASLClientProtocol.dispatch
 
 
 class ManagedCassandraClientFactory(ReconnectingClientFactory):
