@@ -284,6 +284,10 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_ring', keyspace)
         return self.manager.pushRequest(req, retries=retries)
 
+    def describe_token_map(self, retries=None):
+        req = ManagedThriftRequest('describe_token_map')
+        return self.manager.pushRequest(req, retries=retries)
+
     def describe_splits(self, cfName, start_token, end_token, keys_per_split,
                         retries=None):
         req = ManagedThriftRequest('describe_splits', cfName, start_token,
