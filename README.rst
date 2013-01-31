@@ -1,19 +1,16 @@
 Telephus
 ========
-
 Son of Heracles who loved Cassandra. He went a little crazy, at one point. One
 might almost say he was twisted.
 
 Description
 -----------
-
 Telephus is a connection pooled, low-level client API for Cassandra in Twisted
 (Python).
 
 
 Installation
 ------------
-
 Prerequisites:
 
 * Python >= 2.4 (2.5 or later for tests)
@@ -23,16 +20,11 @@ Prerequisites:
 
 Usage
 -----
-
 See example.py for an example of how to use the Telephus API.
 
 
 Unit Tests
 ----------
-
 To run the unit tests, simply use the Twisted test runner, ``trial``::
 
- $ trial telephus
-
-The tests are included in the source code, so this should work even if you are
-not running it from the source checkout directory.
+ $ trial test/
