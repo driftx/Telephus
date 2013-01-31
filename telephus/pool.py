@@ -614,7 +614,7 @@ class CassandraClusterPool(service.Service, object):
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None):
+                 log_cb=log.msg, reactor=None, ssl_ctx_factory=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -657,6 +657,10 @@ class CassandraClusterPool(service.Service, object):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
+
+        @param ssl_ctx_factory: A L{twisted.internet.ssl.ClientContextFactory}
+            instance. If not None, SSL connections will be opened using
+            the provided context factory; if None, SSL will not be used.
         """
 
         self.seed_list = list(seed_list)
@@ -671,6 +675,7 @@ class CassandraClusterPool(service.Service, object):
         self.bind_address = bind_address
         self.keyspace = keyspace
         self.creds = creds
+        self.ssl_ctx_factory = ssl_ctx_factory
         self.request_queue = defer.DeferredQueue()
         self.future_fill_pool = None
         self.removed_nodes = set()
@@ -968,9 +973,15 @@ class CassandraClusterPool(service.Service, object):
         bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
-        self.reactor.connectTCP(node.host, node.port, f,
-                                timeout=self.conn_timeout,
-                                bindAddress=bindaddr)
+        if self.ssl_ctx_factory:
+            self.reactor.connectSSL(node.host, node.port, f,
+                                    contextFactory=self.ssl_ctx_factory,
+                                    timeout=self.conn_timeout,
+                                    bindAddress=bindaddr)
+        else:
+            self.reactor.connectTCP(node.host, node.port, f,
+                                    timeout=self.conn_timeout,
+                                    bindAddress=bindaddr)
         self.connectors.add(f)
 
     def remove_good_conn(self, f):
