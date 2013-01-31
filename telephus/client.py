@@ -184,19 +184,19 @@ class CassandraClient(object):
 
     @requirekwargs('key', 'column_family', 'mapping')
     def batch_insert(self, key=None, column_family=None, mapping=None, timestamp=None,
-                     consistency=None, retries=None, ttl=None):
+                     consistency=None, retries=None, ttl=None, atomic=False):
         if isinstance(mapping, list) and timestamp is not None:
             raise RuntimeError('Timestamp cannot be specified with a list of Mutations')
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = {key: {column_family: self._mk_cols_or_supers(mapping, timestamp, ttl)}}
         return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency,
-                                 retries=retries)
+                                 retries=retries, atomic=atomic)
 
     @requirekwargs('cfmap')
     def batch_remove(self, cfmap=None, start='', finish='', count=100, names=None,
                      reverse=False, consistency=None, timestamp=None, supercolumn=None,
-                     retries=None):
+                     retries=None, atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
@@ -204,11 +204,13 @@ class CassandraClient(object):
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
                 mutmap[key][cf] = [ttypes.Mutation(deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('mutationmap')
-    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None, retries=None, ttl=None):
+    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None, retries=None, ttl=None, atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
@@ -226,7 +228,9 @@ class CassandraClient(object):
                     else:
                         muts.append(c)
                 mutmap[key][cf] = muts
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
@@ -282,6 +286,10 @@ class CassandraClient(object):
 
     def describe_ring(self, keyspace, retries=None):
         req = ManagedThriftRequest('describe_ring', keyspace)
+        return self.manager.pushRequest(req, retries=retries)
+
+    def describe_token_map(self, retries=None):
+        req = ManagedThriftRequest('describe_token_map')
         return self.manager.pushRequest(req, retries=retries)
 
     def describe_splits(self, cfName, start_token, end_token, keys_per_split,
