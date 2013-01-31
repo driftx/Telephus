@@ -49,19 +49,21 @@ import socket
 from time import time
 from itertools import izip, groupby
 from warnings import warn
+from functools import partial
+
 from twisted.application import service
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
 from thrift import Thrift
 from thrift.transport import TTwisted, TTransport
 from thrift.protocol import TBinaryProtocol
+
 from telephus.protocol import (ManagedThriftRequest, ClientBusy,
                                InvalidThriftRequest)
-from telephus.cassandra.c08 import Cassandra as Cassandra08
-from telephus.cassandra.ttypes import *
+from telephus.cassandra import ttypes, Cassandra
 from telephus.client import CassandraClient
-from telephus.translate import (thrift_api_ver_to_cassandra_ver, translateArgs,
-                                postProcess)
+
+ConsistencyLevel = ttypes.ConsistencyLevel
 
 
 noop = lambda *a, **kw: None
@@ -103,7 +105,7 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
     thriftFactory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory
 
     def __init__(self):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra08.Client,
+        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client,
                                                self.thriftFactory())
 
     def connectionMade(self):
@@ -125,7 +127,6 @@ class CassandraPoolParticipantClient(TTwisted.ThriftClientProtocol):
 
 
 class CassandraPoolReconnectorFactory(protocol.ClientFactory):
-    protocol = CassandraPoolParticipantClient
     connector = None
     last_error = None
     noisy = False
@@ -139,14 +140,14 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service, api_version=None):
+    def __init__(self, node, service):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves
         # us.
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
-        self.api_version = api_version
+        self.protocol = partial(CassandraPoolParticipantClient)
 
     def clientConnectionMade(self, proto):
         assert self.my_proto is None
@@ -222,41 +223,28 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         Return a Deferred that will fire with the ring information, or be
         errbacked if something goes wrong.
         """
+        d = defer.succeed(None)
 
-        d = self.my_describe_version()
-
-        def check_version(thrift_ver):
-            cassver = thrift_api_ver_to_cassandra_ver(thrift_ver)
-            if self.api_version is None:
-                self.api_version = cassver
-            elif self.api_version != cassver:
-                raise APIMismatch(
-                    "%s is exposing thrift protocol version %s -> "
-                    "Cassandra version %s, but %s was expected" % (
-                        self.node, thrift_ver, cassver, self.api_version))
-        d.addCallback(check_version)
         if creds is not None:
             d.addCallback(lambda _: self.my_login(creds))
         if keyspace is not None:
             d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-        d.addCallback(lambda _: self.my_describe_ring(keyspace))
-        return d
+
+        return d.addCallback(lambda _: self.my_describe_ring(keyspace))
 
     # The following my_* methods are for internal use, to facilitate the
     # management of the pool and the queries we get. The user should make
     # use of the methods on CassandraClient.
 
     def my_login(self, creds):
-        return self.execute(
-            ManagedThriftRequest(
-                'login', AuthenticationRequest(credentials=creds))
-        )
+        req = ttypes.AuthenticationRequest(credentials=creds)
+        return self.execute(ManagedThriftRequest('login', req))
 
     def my_set_keyspace(self, keyspace):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace == 'system':
+        if keyspace is None or keyspace in ('system', 'system_traces', 'system_auth'):
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
@@ -284,7 +272,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
         def pick_non_system(klist):
             for k in klist:
-                if k.name != 'system':
+                if k.name not in ('system', 'system_traces', 'system_auth'):
                     return k.name
             err = NoKeyspacesAvailable("Can't gather information about the "
                                        "Cassandra ring; no non-system "
@@ -300,9 +288,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
     def execute(self, req, keyspace=None):
         if self.my_proto is None:
-            return defer.errback(error.ConnectionClosed(
-                'Lost connection before %s request could be made' % (
-                    req.method,)))
+            return defer.fail(error.ConnectionClosed(
+                                    'Lost connection before %s request could be made'
+                                    % (req.method,)))
         method = getattr(self.my_proto.client, req.method, None)
         if method is None:
             raise InvalidThriftRequest(
@@ -317,9 +305,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             if keyspace is not None and keyspace != self.keyspace:
                 d.addCallback(lambda _: self.my_set_keyspace(keyspace))
-            args = translateArgs(req, self.api_version)
-            d.addCallback(lambda _: method(*args))
-            d.addCallback(lambda results: postProcess(results, req.method))
+            d.addCallback(lambda _: method(*(req.args)))
         return d
 
     def clear_job(self, x):
@@ -545,6 +531,15 @@ class CassandraNode:
         return hash((self.__class__, self.host, self.port))
 
 
+def get_endpoints_from_tokenrange(tokenrange):
+    if hasattr(tokenrange, "rpc_endpoints") and tokenrange.rpc_endpoints:
+        def good_addr(ep, rpc):
+            return rpc if not rpc.startswith("0.0.0.0") else ep
+        return map(good_addr, tokenrange.endpoints, tokenrange.rpc_endpoints)
+    else:
+        return tokenrange.endpoints
+
+
 class CassandraClusterPool(service.Service, object):
     """
     Manage a pool of connections to nodes in a Cassandra cluster.
@@ -614,13 +609,12 @@ class CassandraClusterPool(service.Service, object):
     request_retries = 4
     conn_factory = CassandraPoolReconnectorFactory
 
-    retryables = (IOError, socket.error, Thrift.TException,
-                  TimedOutException, UnavailableException,
-                  TTransport.TTransportException)
+    retryables = [IOError, socket.error, Thrift.TException,
+                  TTransport.TTransportException]
 
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
-                 log_cb=log.msg, reactor=None, require_api_version=None):
+                 log_cb=log.msg, reactor=None):
         """
         Initialize a CassandraClusterPool.
 
@@ -663,16 +657,6 @@ class CassandraClusterPool(service.Service, object):
 
         @param reactor: The reactor instance to use when starting thrift
             connections or setting timers.
-
-        @param require_api_version: If not None, Telephus will require that
-            all connections conform to the API for the given Cassandra version.
-            Possible values are "0.7", "0.8", "1.0", etc.
-
-            If None, Telephus will consider all supported API versions to be
-            acceptable.
-
-            If the api version reported by a remote node is not compatible, the
-            connection to that node will be aborted. Default: None
         """
 
         self.seed_list = list(seed_list)
@@ -688,7 +672,6 @@ class CassandraClusterPool(service.Service, object):
         self.keyspace = keyspace
         self.creds = creds
         self.request_queue = defer.DeferredQueue()
-        self.require_api_version = require_api_version
         self.future_fill_pool = None
         self.removed_nodes = set()
         self._client_instance = CassandraClient(self)
@@ -696,6 +679,9 @@ class CassandraClusterPool(service.Service, object):
         if reactor is None:
             from twisted.internet import reactor
         self.reactor = reactor
+
+        self.retryables.extend((ttypes.TimedOutException,
+                                ttypes.UnavailableException))
 
         # A set of CassandraNode instances representing known nodes. This
         # includes nodes from the initial seed list, nodes seen in
@@ -873,7 +859,8 @@ class CassandraClusterPool(service.Service, object):
 
     def update_known_nodes(self, ring):
         for tokenrange in ring:
-            for addr in tokenrange.endpoints:
+            endpoints = get_endpoints_from_tokenrange(tokenrange)
+            for addr in endpoints:
                 if ':' in addr:
                     addr, port = addr.split(':', 1)
                     port = int(port)
@@ -977,7 +964,7 @@ class CassandraClusterPool(service.Service, object):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self, self.require_api_version)
+        f = self.conn_factory(node, self)
         bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
@@ -1125,8 +1112,8 @@ class CassandraClusterPool(service.Service, object):
         through it are guaranteed to go to the given keyspace, no matter what
         other consumers of this pool may do.
         """
-        return CassandraClient(CassandraKeyspaceConnection(self, keyspace),
-                               consistency=consistency)
+        conn = CassandraKeyspaceConnection(self, keyspace)
+        return CassandraClient(conn, consistency=consistency)
 
     def __str__(self):
         return '<%s: [%d nodes known] [%d connections]>' \

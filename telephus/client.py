@@ -3,9 +3,11 @@ import time
 
 from twisted.internet import defer, reactor
 
-from telephus.cassandra.ttypes import *
+from telephus.cassandra import ttypes
 from telephus.protocol import ManagedThriftRequest
 
+
+ConsistencyLevel = ttypes.ConsistencyLevel
 
 class requirekwargs:
     def __init__(self, *args):
@@ -31,13 +33,13 @@ class CassandraClient(object):
 
     def _getparent(self, columnParentOrCF, super_column=None):
         if isinstance(columnParentOrCF, str):
-            return ColumnParent(columnParentOrCF, super_column=super_column)
+            return ttypes.ColumnParent(columnParentOrCF, super_column=super_column)
         else:
             return columnParentOrCF
 
     def _getpath(self, columnPathOrCF, col, super_column=None):
         if isinstance(columnPathOrCF, str):
-            return ColumnPath(
+            return ttypes.ColumnPath(
                 columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
@@ -46,8 +48,8 @@ class CassandraClient(object):
         if names:
             srange = None
         else:
-            srange = SliceRange(start, finish, reverse, count)
-        return SlicePredicate(names, srange)
+            srange = ttypes.SliceRange(start, finish, reverse, count)
+        return ttypes.SlicePredicate(names, srange)
 
     @defer.inlineCallbacks
     def _wait_for_schema_agreement(self):
@@ -138,9 +140,11 @@ class CassandraClient(object):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         if not use_tokens:
-            krange = KeyRange(start_key=start, end_key=finish, count=count)
+            krange = ttypes.KeyRange(
+                start_key=start, end_key=finish, count=count)
         else:
-            krange = KeyRange(start_token=start, end_token=finish, count=count)
+            krange = ttypes.KeyRange(
+                start_token=start, end_token=finish, count=count)
         pred = self._mkpred(
             names, column_start, column_finish, reverse, column_count)
         req = ManagedThriftRequest(
@@ -153,7 +157,7 @@ class CassandraClient(object):
                            names=None, count=100, column_count=100,
                            reverse=False, consistency=None, super_column=None,
                            retries=None):
-        idx_clause = IndexClause(expressions, start_key, count)
+        idx_clause = ttypes.IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         pred = self._mkpred(
@@ -170,7 +174,7 @@ class CassandraClient(object):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest(
-            'insert', key, cp, Column(column, value, timestamp, ttl),
+            'insert', key, cp, ttypes.Column(column, value, timestamp, ttl),
             consistency)
         return self.manager.pushRequest(req, retries=retries)
 
@@ -180,7 +184,7 @@ class CassandraClient(object):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest(
-            'add', key, cp, CounterColumn(column, value), consistency)
+            'add', key, cp, ttypes.CounterColumn(column, value), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
@@ -203,7 +207,9 @@ class CassandraClient(object):
 
     @requirekwargs('key', 'column_family', 'mapping')
     def batch_insert(self, key=None, column_family=None, mapping=None,
-                     timestamp=None, consistency=None, retries=None, ttl=None):
+                     timestamp=None, consistency=None, retries=None, ttl=None,
+                     atomic=False):
+
         if isinstance(mapping, list) and timestamp is not None:
             raise RuntimeError(
                 'Timestamp cannot be specified with a list of Mutations')
@@ -213,26 +219,29 @@ class CassandraClient(object):
             {column_family: self._mk_cols_or_supers(mapping, timestamp, ttl)}}
         return self.batch_mutate(
             mutmap, timestamp=timestamp, consistency=consistency,
-            retries=retries)
+            retries=retries, atomic=atomic)
 
     @requirekwargs('cfmap')
     def batch_remove(self, cfmap=None, start='', finish='', count=100,
                      names=None, reverse=False, consistency=None,
-                     timestamp=None, supercolumn=None, retries=None):
+                     timestamp=None, supercolumn=None, retries=None,
+                     atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
         for cf, keys in cfmap.iteritems():
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
-                mutmap[key][cf] = [Mutation(
-                    deletion=Deletion(timestamp, supercolumn, pred))]
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+                mutmap[key][cf] = [ttypes.Mutation(
+                    deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('mutationmap')
     def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None,
-                     retries=None, ttl=None):
+                     retries=None, ttl=None, atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
@@ -242,17 +251,22 @@ class CassandraClient(object):
                     colmap, timestamp, ttl, make_deletions=True)
                 muts = []
                 for c in cols_or_supers_or_deletions:
-                    if isinstance(c, SuperColumn):
+                    if isinstance(c, ttypes.SuperColumn):
                         muts.append(
-                            Mutation(ColumnOrSuperColumn(super_column=c)))
-                    elif isinstance(c, Column):
-                        muts.append(Mutation(ColumnOrSuperColumn(column=c)))
-                    elif isinstance(c, Deletion):
-                        muts.append(Mutation(deletion=c))
+                            ttypes.Mutation(
+                                ttypes.ColumnOrSuperColumn(super_column=c)))
+                    elif isinstance(c, ttypes.Column):
+                        muts.append(
+                                ttypes.Mutation(
+                                    ttypes.ColumnOrSuperColumn(column=c)))
+                    elif isinstance(c, ttypes.Deletion):
+                        muts.append(ttypes.Mutation(deletion=c))
                     else:
                         muts.append(c)
                 mutmap[key][cf] = muts
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     def _mk_cols_or_supers(self, mapping, timestamp, ttl=None,
@@ -266,18 +280,19 @@ class CassandraClient(object):
                 for name in mapping:
                     cols = []
                     for col, val in mapping[name].iteritems():
-                        cols.append(Column(col, val, timestamp, ttl))
-                    colsorsupers.append(SuperColumn(name=name, columns=cols))
+                        cols.append(ttypes.Column(col, val, timestamp, ttl))
+                    colsorsupers.append(
+                            ttypes.SuperColumn(name=name, columns=cols))
             else:
                 cols2delete = []
                 for col, val in mapping.iteritems():
                     if val is None and make_deletions:
                         cols2delete.append(col)
                     else:
-                        colsorsupers.append(Column(col, val, timestamp, ttl))
+                        colsorsupers.append(ttypes.Column(col, val, timestamp, ttl))
                 if cols2delete:
-                    colsorsupers.append(Deletion(
-                        timestamp, None, SlicePredicate(
+                    colsorsupers.append(ttypes.Deletion(
+                        timestamp, None, ttypes.SlicePredicate(
                             column_names=cols2delete)))
         else:
             raise TypeError('dict (of dicts) or list of '
@@ -312,6 +327,10 @@ class CassandraClient(object):
 
     def describe_ring(self, keyspace, retries=None):
         req = ManagedThriftRequest('describe_ring', keyspace)
+        return self.manager.pushRequest(req, retries=retries)
+
+    def describe_token_map(self, retries=None):
+        req = ManagedThriftRequest('describe_token_map')
         return self.manager.pushRequest(req, retries=retries)
 
     def describe_splits(self, cfName, start_token, end_token, keys_per_split,

@@ -7,11 +7,9 @@ from itertools import groupby
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
 from twisted.python import log
-from telephus.pool import (CassandraClusterPool, CassandraPoolReconnectorFactory,
-                           CassandraPoolParticipantClient, TTransport)
-from telephus import translate
-from telephus.cassandra.c08 import Cassandra
-from telephus.cassandra.ttypes import *
+from telephus.pool import CassandraClusterPool, TTransport, get_endpoints_from_tokenrange
+
+from telephus.cassandra import ttypes
 
 try:
     from Cassanova import cassanova
@@ -32,6 +30,31 @@ def addtimeout(d, waittime):
             timeouter.cancel()
         return x
     d.addBoth(canceltimeout)
+
+class GeneralPoolTest(unittest.TestCase):
+    def test_get_endpoints_from_tokenrange(self):
+        # 07 token ranges have no rpc property
+        range07 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"])
+        self.assertEqual(["127.0.0.1", "127.0.0.2"], get_endpoints_from_tokenrange(range07))
+
+        # the rpc endpoints field is optional, so test without it set
+        range08 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"],
+                    rpc_endpoints=None)
+        self.assertEqual(["127.0.0.1", "127.0.0.2"], get_endpoints_from_tokenrange(range08))
+
+        # test with some bad rpc_endpoints
+        range08 = ttypes.TokenRange(
+                    start_token="1",
+                    end_token="2",
+                    endpoints=["127.0.0.1", "127.0.0.2"],
+                    rpc_endpoints=["127.0.0.5", "0.0.0.0"])
+        self.assertEqual(["127.0.0.5", "127.0.0.2"], get_endpoints_from_tokenrange(range08))
 
 class CassandraClusterPoolTest(unittest.TestCase):
     start_port = 44449
@@ -97,12 +120,12 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
-                         cluster_class=None, api_version=None):
+                         cluster_class=None):
         if cluster_class is None:
             cluster_class = FakeCassandraCluster
         cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
-                                    pool_size=pool_size, api_version=api_version)
+                                    pool_size=pool_size)
         if start:
             cluster.startService()
             pool.startService()
@@ -123,17 +146,17 @@ class CassandraClusterPoolTest(unittest.TestCase):
         if ksname is None:
             ksname = self.ksname
         yield self.pool.system_add_keyspace(
-            KsDef(
+            ttypes.KsDef(
                 name=ksname,
                 replication_factor=1,
                 strategy_class='org.apache.cassandra.locator.SimpleStrategy',
                 cf_defs=(
-                    CfDef(
+                    ttypes.CfDef(
                         keyspace=ksname,
                         name='Standard1',
                         column_type='Standard'
                     ),
-                    CfDef(
+                    ttypes.CfDef(
                         keyspace=ksname,
                         name='Super1',
                         column_type='Super'
@@ -156,9 +179,9 @@ class CassandraClusterPoolTest(unittest.TestCase):
         mutmap = {}
         for k in range(numkeys):
             key = 'key%03d' % k
-            cols = [Column(name='%s-%03d-%03d' % (ksname, k, n),
-                           value='val-%s-%03d-%03d' % (ksname, k, n),
-                           timestamp=timestamp)
+            cols = [ttypes.Column(name='%s-%03d-%03d' % (ksname, k, n),
+                                  value='val-%s-%03d-%03d' % (ksname, k, n),
+                                  timestamp=timestamp)
                     for n in range(numcols)]
             mutmap[key] = {cf: cols}
         yield self.pool.batch_mutate(mutationmap=mutmap)
@@ -220,7 +243,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield self.insert_dumb_rows('KS1')
 
             yield self.assertFailure(self.pool.set_keyspace('i-dont-exist'),
-                                     InvalidRequestException)
+                                     ttypes.InvalidRequestException)
             self.flushLoggedErrors()
 
             # should still be in KS1
@@ -335,7 +358,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield deferwait(0.1)
 
             workers = self.assertNumWorkers(1)
-            node = self.killWorkingNode()
+            self.killWorkingNode()
 
             # allow reconnect
             yield deferwait(0.5)
@@ -810,8 +833,7 @@ class CassandraClusterPoolTest(unittest.TestCase):
             self.assertApproximates(opsdone, numops, 0.5 * numops)
 
         starttime = time()
-        with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes,
-                                   api_version=translate.CASSANDRA_08_VERSION):
+        with self.cluster_and_pool(pool_size=1, num_nodes=num_nodes):
             yield self.make_standard_cfs(ksname)
             yield self.insert_dumb_rows(ksname, numkeys=num_keys)
 
