@@ -1,3 +1,4 @@
 *.pyc
 *.sw?
 *.cache
+_trial_temp

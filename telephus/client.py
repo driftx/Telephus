@@ -1,8 +1,11 @@
-from twisted.internet import defer, reactor
-from telephus.cassandra import ttypes
-from telephus.protocol import ManagedThriftRequest
 from collections import defaultdict
 import time
+
+from twisted.internet import defer, reactor
+
+from telephus.cassandra import ttypes
+from telephus.protocol import ManagedThriftRequest
+
 
 ConsistencyLevel = ttypes.ConsistencyLevel
 
@@ -18,6 +21,7 @@ class requirekwargs:
             return f(*args, **kwargs)
         wrapper.__doc__ = f.__doc__
         return wrapper
+
 
 class CassandraClient(object):
     def __init__(self, manager, consistency=ConsistencyLevel.ONE):
@@ -35,7 +39,8 @@ class CassandraClient(object):
 
     def _getpath(self, columnPathOrCF, col, super_column=None):
         if isinstance(columnPathOrCF, str):
-            return ttypes.ColumnPath(columnPathOrCF, super_column=super_column, column=col)
+            return ttypes.ColumnPath(
+                columnPathOrCF, super_column=super_column, column=col)
         else:
             return columnPathOrCF
 
@@ -51,63 +56,69 @@ class CassandraClient(object):
         agreement = False
         while not agreement:
             result = yield self.describe_schema_versions()
-            live_vers = [skey for (skey, nlist) in result.items() if skey != 'UNREACHABLE']
+            live_vers = [skey for (skey, nlist) in result.items()
+                         if skey != 'UNREACHABLE']
             agreement = len(live_vers) == 1
             d = defer.Deferred()
             reactor.callLater(0.1, d.callback, True)
             yield d
 
     @defer.inlineCallbacks
-    def _push_system_request(self,req,retries=None,block=True):
+    def _push_system_request(self, req, retries=None, block=True):
         result = yield self.manager.pushRequest(req, retries=retries)
-        if block: yield self._wait_for_schema_agreement()
+        if block:
+            yield self._wait_for_schema_agreement()
         defer.returnValue(result)
 
     @requirekwargs('key', 'column_family')
-    def get(self, key=None, column_family=None, column=None, super_column=None, consistency=None,
-            retries=None):
+    def get(self, key=None, column_family=None, column=None, super_column=None,
+            consistency=None, retries=None):
         cp = self._getpath(column_family, column, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('get', key, cp, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
-    def get_slice(self, key=None, column_family=None, names=None, start='', finish='',
-                  reverse=False, count=100, consistency=None, super_column=None,
-                  retries=None):
+    def get_slice(self, key=None, column_family=None, names=None, start='',
+                  finish='', reverse=False, count=100, consistency=None,
+                  super_column=None, retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         pred = self._mkpred(names, start, finish, reverse, count)
         req = ManagedThriftRequest('get_slice', key, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
-    def multiget(self, keys=None, column_family=None, column=None, super_column=None,
-                  consistency=None, retries=None):
-        return self.multiget_slice(keys, column_family, names=[column], count=100,
-                   consistency=consistency, retries=retries, super_column=super_column)
+    def multiget(self, keys=None, column_family=None, column=None,
+                 super_column=None, consistency=None, retries=None):
+        return self.multiget_slice(
+            keys, column_family, names=[column], count=100,
+            consistency=consistency, retries=retries,
+            super_column=super_column)
 
     @requirekwargs('keys', 'column_family')
-    def multiget_slice(self, keys=None, column_family=None, names=None, start='', finish='',
-                  reverse=False, count=100, consistency=None, super_column=None,
-                  retries=None):
+    def multiget_slice(self, keys=None, column_family=None, names=None,
+                       start='', finish='', reverse=False, count=100,
+                       consistency=None, super_column=None, retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         pred = self._mkpred(names, start, finish, reverse, count)
-        req = ManagedThriftRequest('multiget_slice', keys, cp, pred, consistency)
+        req = ManagedThriftRequest(
+            'multiget_slice', keys, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('keys', 'column_family')
-    def multiget_count(self, keys=None, column_family=None, super_column=None, start='', finish='',
-                  consistency=None, retries=None):
+    def multiget_count(self, keys=None, column_family=None, super_column=None,
+                       start='', finish='', consistency=None, retries=None):
         cp = self._getparent(column_family, super_column)
         pred = self._mkpred(None, start, finish, False, 2147483647)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('multiget_count', keys, cp, pred, consistency)
+        req = ManagedThriftRequest(
+            'multiget_count', keys, cp, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
-    def get_count(self, key=None, column_family=None, super_column=None, start='', finish='',
-                  consistency=None, retries=None):
+    def get_count(self, key=None, column_family=None, super_column=None,
+                  start='', finish='', consistency=None, retries=None):
         cp = self._getparent(column_family, super_column)
         pred = self._mkpred(None, start, finish, False, 2147483647)
         consistency = consistency or self.consistency
@@ -121,53 +132,65 @@ class CassandraClient(object):
         return self.get_range_slices(columnParent, **kwargs)
 
     @requirekwargs('column_family')
-    def get_range_slices(self, column_family=None, start='', finish='', column_start='',
-            column_finish='', names=None, count=100, column_count=100,
-            reverse=False, use_tokens=False, consistency=None, super_column=None,
-            retries=None):
+    def get_range_slices(self, column_family=None, start='', finish='',
+                         column_start='', column_finish='', names=None,
+                         count=100, column_count=100, reverse=False,
+                         use_tokens=False, consistency=None, super_column=None,
+                         retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
         if not use_tokens:
-            krange = ttypes.KeyRange(start_key=start, end_key=finish, count=count)
+            krange = ttypes.KeyRange(
+                start_key=start, end_key=finish, count=count)
         else:
-            krange = ttypes.KeyRange(start_token=start, end_token=finish, count=count)
-        pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
-        req = ManagedThriftRequest('get_range_slices', cp, pred, krange, consistency)
+            krange = ttypes.KeyRange(
+                start_token=start, end_token=finish, count=count)
+        pred = self._mkpred(
+            names, column_start, column_finish, reverse, column_count)
+        req = ManagedThriftRequest(
+            'get_range_slices', cp, pred, krange, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('column_family', 'expressions')
-    def get_indexed_slices(self, column_family=None, expressions=None, start_key='', column_start='',
-            column_finish='', names=None, count=100, column_count=100,
-            reverse=False, consistency=None, super_column=None,
-            retries=None):
-        # NOTE: IndexClause and get_indexed_slices are deprecated
+    def get_indexed_slices(self, column_family=None, expressions=None,
+                           start_key='', column_start='', column_finish='',
+                           names=None, count=100, column_count=100,
+                           reverse=False, consistency=None, super_column=None,
+                           retries=None):
         idx_clause = ttypes.IndexClause(expressions, start_key, count)
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        pred = self._mkpred(names, column_start, column_finish, reverse, column_count)
-        req = ManagedThriftRequest('get_indexed_slices', cp, idx_clause, pred, consistency)
+        pred = self._mkpred(
+            names, column_start, column_finish, reverse, column_count)
+        req = ManagedThriftRequest(
+            'get_indexed_slices', cp, idx_clause, pred, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'value')
-    def insert(self, key=None, column_family=None, value=None, column=None, super_column=None,
-               timestamp=None, consistency=None, retries=None, ttl=None):
+    def insert(self, key=None, column_family=None, value=None, column=None,
+               super_column=None, timestamp=None, consistency=None,
+               retries=None, ttl=None):
         timestamp = timestamp or self._time()
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('insert', key, cp, ttypes.Column(column, value, timestamp, ttl), consistency)
+        req = ManagedThriftRequest(
+            'insert', key, cp, ttypes.Column(column, value, timestamp, ttl),
+            consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'value', 'column')
-    def add(self, key=None, column_family=None, value=None, column=None, super_column=None,
-            consistency=None, retries=None):
+    def add(self, key=None, column_family=None, value=None, column=None,
+            super_column=None, consistency=None, retries=None):
         cp = self._getparent(column_family, super_column)
         consistency = consistency or self.consistency
-        req = ManagedThriftRequest('add', key, cp, ttypes.CounterColumn(column, value), consistency)
+        req = ManagedThriftRequest(
+            'add', key, cp, ttypes.CounterColumn(column, value), consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family')
-    def remove(self, key=None, column_family=None, column=None, super_column=None,
-               timestamp=None, consistency=None, retries=None):
+    def remove(self, key=None, column_family=None, column=None,
+               super_column=None, timestamp=None, consistency=None,
+               retries=None):
         cp = self._getpath(column_family, column, super_column)
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
@@ -175,61 +198,79 @@ class CassandraClient(object):
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'column')
-    def remove_counter(self, key=None, column_family=None, column=None, super_column=None,
-                       consistency=None, retries=None):
+    def remove_counter(self, key=None, column_family=None, column=None,
+                       super_column=None, consistency=None, retries=None):
         cp = self._getpath(column_family, column, super_column)
         consistency = consistency or self.consistency
         req = ManagedThriftRequest('remove_counter', key, cp, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('key', 'column_family', 'mapping')
-    def batch_insert(self, key=None, column_family=None, mapping=None, timestamp=None,
-                     consistency=None, retries=None, ttl=None):
+    def batch_insert(self, key=None, column_family=None, mapping=None,
+                     timestamp=None, consistency=None, retries=None, ttl=None,
+                     atomic=False):
+
         if isinstance(mapping, list) and timestamp is not None:
-            raise RuntimeError('Timestamp cannot be specified with a list of Mutations')
+            raise RuntimeError(
+                'Timestamp cannot be specified with a list of Mutations')
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
-        mutmap = {key: {column_family: self._mk_cols_or_supers(mapping, timestamp, ttl)}}
-        return self.batch_mutate(mutmap, timestamp=timestamp, consistency=consistency,
-                                 retries=retries)
+        mutmap = {key:
+            {column_family: self._mk_cols_or_supers(mapping, timestamp, ttl)}}
+        return self.batch_mutate(
+            mutmap, timestamp=timestamp, consistency=consistency,
+            retries=retries, atomic=atomic)
 
     @requirekwargs('cfmap')
-    def batch_remove(self, cfmap=None, start='', finish='', count=100, names=None,
-                     reverse=False, consistency=None, timestamp=None, supercolumn=None,
-                     retries=None):
+    def batch_remove(self, cfmap=None, start='', finish='', count=100,
+                     names=None, reverse=False, consistency=None,
+                     timestamp=None, supercolumn=None, retries=None,
+                     atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
         for cf, keys in cfmap.iteritems():
             pred = self._mkpred(names, start, finish, reverse, count)
             for key in keys:
-                mutmap[key][cf] = [ttypes.Mutation(deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+                mutmap[key][cf] = [ttypes.Mutation(
+                    deletion=ttypes.Deletion(timestamp, supercolumn, pred))]
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
     @requirekwargs('mutationmap')
-    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None, retries=None, ttl=None):
+    def batch_mutate(self, mutationmap=None, timestamp=None, consistency=None,
+                     retries=None, ttl=None, atomic=False):
         timestamp = timestamp or self._time()
         consistency = consistency or self.consistency
         mutmap = defaultdict(dict)
         for key, cfmap in mutationmap.iteritems():
             for cf, colmap in cfmap.iteritems():
-                cols_or_supers_or_deletions = self._mk_cols_or_supers(colmap, timestamp, ttl, make_deletions=True)
+                cols_or_supers_or_deletions = self._mk_cols_or_supers(
+                    colmap, timestamp, ttl, make_deletions=True)
                 muts = []
                 for c in cols_or_supers_or_deletions:
                     if isinstance(c, ttypes.SuperColumn):
-                        muts.append(ttypes.Mutation(ttypes.ColumnOrSuperColumn(super_column=c)))
+                        muts.append(
+                            ttypes.Mutation(
+                                ttypes.ColumnOrSuperColumn(super_column=c)))
                     elif isinstance(c, ttypes.Column):
-                        muts.append(ttypes.Mutation(ttypes.ColumnOrSuperColumn(column=c)))
+                        muts.append(
+                                ttypes.Mutation(
+                                    ttypes.ColumnOrSuperColumn(column=c)))
                     elif isinstance(c, ttypes.Deletion):
                         muts.append(ttypes.Mutation(deletion=c))
                     else:
                         muts.append(c)
                 mutmap[key][cf] = muts
-        req = ManagedThriftRequest('batch_mutate', mutmap, consistency)
+
+        method = 'atomic_batch_mutate' if atomic else 'batch_mutate'
+        req = ManagedThriftRequest(method, mutmap, consistency)
         return self.manager.pushRequest(req, retries=retries)
 
-    def _mk_cols_or_supers(self, mapping, timestamp, ttl=None, make_deletions=False):
+    def _mk_cols_or_supers(self, mapping, timestamp, ttl=None,
+                           make_deletions=False):
         if isinstance(mapping, list):
             return mapping
         colsorsupers = []
@@ -238,9 +279,10 @@ class CassandraClient(object):
             if isinstance(mapping[first], dict):
                 for name in mapping:
                     cols = []
-                    for col,val in mapping[name].iteritems():
+                    for col, val in mapping[name].iteritems():
                         cols.append(ttypes.Column(col, val, timestamp, ttl))
-                    colsorsupers.append(ttypes.SuperColumn(name=name, columns=cols))
+                    colsorsupers.append(
+                            ttypes.SuperColumn(name=name, columns=cols))
             else:
                 cols2delete = []
                 for col, val in mapping.iteritems():
@@ -249,9 +291,12 @@ class CassandraClient(object):
                     else:
                         colsorsupers.append(ttypes.Column(col, val, timestamp, ttl))
                 if cols2delete:
-                    colsorsupers.append(ttypes.Deletion(timestamp, None, ttypes.SlicePredicate(column_names=cols2delete)))
+                    colsorsupers.append(ttypes.Deletion(
+                        timestamp, None, ttypes.SlicePredicate(
+                            column_names=cols2delete)))
         else:
-            raise TypeError('dict (of dicts) or list of Columns/SuperColumns expected')
+            raise TypeError('dict (of dicts) or list of '
+                            'Columns/SuperColumns expected')
         return colsorsupers
 
     def set_keyspace(self, keyspace):
@@ -284,6 +329,10 @@ class CassandraClient(object):
         req = ManagedThriftRequest('describe_ring', keyspace)
         return self.manager.pushRequest(req, retries=retries)
 
+    def describe_token_map(self, retries=None):
+        req = ManagedThriftRequest('describe_token_map')
+        return self.manager.pushRequest(req, retries=retries)
+
     def describe_splits(self, cfName, start_token, end_token, keys_per_split,
                         retries=None):
         req = ManagedThriftRequest('describe_splits', cfName, start_token,
@@ -300,39 +349,44 @@ class CassandraClient(object):
 
     def system_drop_column_family(self, cfName, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_column_family', cfName)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_drop_keyspace(self, keyspace, retries=None, block=True):
         req = ManagedThriftRequest('system_drop_keyspace', keyspace)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     if 0:
         # these are disabled in Cassandra 0.7 right now
-        def system_rename_column_family(self, oldname, newname, retries=None, block=True):
-            if block: self._wait_for_schema_agreement()
-            req = ManagedThriftRequest('system_rename_column_family', oldname, newname)
-            return self._push_system_request(req,retries=retries,block=block)
+        def system_rename_column_family(self, oldname, newname, retries=None,
+                                        block=True):
+            if block:
+                self._wait_for_schema_agreement()
+            req = ManagedThriftRequest(
+                'system_rename_column_family', oldname, newname)
+            return self._push_system_request(req, retries=retries, block=block)
 
-        def system_rename_keyspace(self, oldname, newname, retries=None, block=True):
-            req = ManagedThriftRequest('system_rename_keyspace', oldname, newname)
-            return self._push_system_request(req,retries=retries,block=block)
+        def system_rename_keyspace(self, oldname, newname, retries=None,
+                                   block=True):
+            req = ManagedThriftRequest(
+                'system_rename_keyspace', oldname, newname)
+            return self._push_system_request(req, retries=retries, block=block)
 
     # TODO: make friendly
     def system_add_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_column_family', cfDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_update_column_family(self, cfDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_column_family', cfDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_add_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_add_keyspace', ksDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def system_update_keyspace(self, ksDef, retries=None, block=True):
         req = ManagedThriftRequest('system_update_keyspace', ksDef)
-        return self._push_system_request(req,retries=retries,block=block)
+        return self._push_system_request(req, retries=retries, block=block)
 
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')

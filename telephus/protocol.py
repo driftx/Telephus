@@ -10,6 +10,7 @@ from twisted.python import failure
 from telephus.cassandra import Cassandra, ttypes
 from telephus._sasl import ThriftSASLClientProtocol
 
+
 class ClientBusy(Exception):
     pass
 
@@ -31,7 +32,8 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
     _parent_protocol = TTwisted.ThriftClientProtocol
 
     def __init__(self, iprot_factory, oprot_factory=None, keyspace=None):
-        TTwisted.ThriftClientProtocol.__init__(self, Cassandra.Client, iprot_factory, oprot_factory)
+        TTwisted.ThriftClientProtocol.__init__(
+            self, Cassandra.Client, iprot_factory, oprot_factory)
         self.iprot_factory = iprot_factory
         self.deferred = None
         self.aborted = False
@@ -98,16 +100,17 @@ class ManagedThriftClientProtocol(TTwisted.ThriftClientProtocol):
 
 class AuthenticatedThriftClientProtocol(ManagedThriftClientProtocol):
 
-    def __init__(self, keyspace, credentials, iprot_factory, oprot_factory=None, **kwargs):
-        ManagedThriftClientProtocol.__init__(self, iprot_factory, oprot_factory,
-                                             keyspace=keyspace, **kwargs)
+    def __init__(self, keyspace, credentials, iprot_factory,
+                 oprot_factory=None, **kwargs):
+        ManagedThriftClientProtocol.__init__(
+            self, iprot_factory, oprot_factory, keyspace=keyspace, **kwargs)
         self.credentials = credentials
 
     def setupConnection(self):
         auth = ttypes.AuthenticationRequest(credentials=self.credentials)
         d = self.client.login(auth)
-        d.addCallback(lambda _: ManagedThriftClientProtocol.setupConnection(self))
-        return d
+        return d.addCallback(
+            lambda _: ManagedThriftClientProtocol.setupConnection(self))
 
 
 class SASLThriftClientProtocol(ManagedThriftClientProtocol, ThriftSASLClientProtocol):
@@ -155,7 +158,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
             self.deferred = None
 
     def clientConnectionFailed(self, connector, reason):
-        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+        ReconnectingClientFactory.clientConnectionFailed(
+            self, connector, reason)
         self._errback(reason)
 
     def clientSetupFailed(self, reason):
@@ -193,7 +197,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
         self.keyspace = keyspace
         dfrds = []
         for p in self._protos:
-            dfrds.append(p.submitRequest(ManagedThriftRequest('set_keyspace', keyspace)))
+            dfrds.append(p.submitRequest(ManagedThriftRequest(
+                'set_keyspace', keyspace)))
         return defer.gatherResults(dfrds)
 
     def login(self, credentials):
@@ -206,7 +211,8 @@ class ManagedCassandraClientFactory(ReconnectingClientFactory):
 
     def submitRequest(self, proto):
         def reqError(err, req, d, r):
-            if err.check(ttypes.InvalidRequestException, InvalidThriftRequest) or r < 1:
+            if err.check(ttypes.InvalidRequestException, InvalidThriftRequest) \
+                    or r < 1:
                 if err.tb is None:
                     try:
                         raise err.value
