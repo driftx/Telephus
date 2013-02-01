@@ -67,6 +67,8 @@ ConsistencyLevel = ttypes.ConsistencyLevel
 
 noop = lambda *a, **kw: None
 
+SYSTEM_KEYSPACES = ("system", "system_traces", "system_auth", "dse_auth")
+
 class NoKeyspacesAvailable(UserWarning):
     """
     Indicates CassandraClusterPool could not collect information about the
@@ -279,14 +281,16 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace == 'system':
+        if keyspace is None or keyspace in SYSTEM_KEYSPACES:
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
         d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
+
         def suppress_no_keyspaces_error(f):
             f.trap(NoKeyspacesAvailable)
             return ()
+
         d.addErrback(suppress_no_keyspaces_error)
         return d
 
@@ -302,9 +306,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         of getting a valid ring view. Can't use 'system' or null.
         """
         d = self.my_describe_keyspaces()
+
         def pick_non_system(klist):
             for k in klist:
-                if k.name != 'system':
+                if k.name not in SYSTEM_KEYSPACES:
                     return k.name
             err = NoKeyspacesAvailable("Can't gather information about the "
                                        "Cassandra ring; no non-system "
@@ -797,7 +802,6 @@ class CassandraClusterPool(service.Service, object):
         else:
             self.log(repr(_stuff), **kw)
 
-
     # methods for inspecting current connection state
 
     def all_connectors(self):
@@ -845,7 +849,6 @@ class CassandraClusterPool(service.Service, object):
 
     def num_pending_conns_to(self, node):
         return len(self.all_pending_conns_to(node))
-
 
     def add_connection_score(self, node):
         """
@@ -927,7 +930,7 @@ class CassandraClusterPool(service.Service, object):
                 break
             nodes_and_conns = groupby(sorted(active_conns, key=nodegetter), nodegetter)
             nodes_and_counts = ((n, len(list(conns))) for (n, conns) in nodes_and_conns)
-            bestnode, bestcount = max(nodes_and_counts, key=lambda (n,count): count)
+            bestnode, bestcount = max(nodes_and_counts, key=lambda (n, count): count)
             # should be safe from IndexError
             yield self.all_active_conns_to(bestnode)[0]
 
@@ -989,7 +992,7 @@ class CassandraClusterPool(service.Service, object):
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
         f = self.conn_factory(node, self, self.sasl_cred_factory)
-        bindaddr=self.bind_address
+        bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
         self.reactor.connectTCP(node.host, node.port, f,
