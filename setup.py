@@ -11,8 +11,5 @@ setup(
     author='brandon@faltering.com',
     url='http://github.com/driftx/Telephus',
     packages=['telephus',
-              'telephus.cassandra',
-              'telephus.cassandra.c07',
-              'telephus.cassandra.c08',
-              'telephus.test']
+              'telephus.cassandra']
 )
