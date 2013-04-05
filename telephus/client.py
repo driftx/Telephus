@@ -391,3 +391,16 @@ class CassandraClient(object):
     def describe_version(self, retries=None):
         req = ManagedThriftRequest('describe_version')
         return self.manager.pushRequest(req, retries=retries)
+
+    def set_cql_version(self, version, retries=None):
+        req = ManagedThriftRequest('set_cql_version', version)
+        return self.manager.pushRequest(req, retries=retries)
+
+    def execute_cql_query(self, query, compression=ttypes.Compression.NONE, retries=None):
+        req = ManagedThriftRequest('execute_cql_query', query, compression)
+        return self.manager.pushRequest(req, retries=retries)
+
+    def execute_cql3_query(self, query, consistency=None, compression=ttypes.Compression.NONE, retries=None):
+        consistency = consistency or self.consistency
+        req = ManagedThriftRequest('execute_cql3_query', query, compression, consistency)
+        return self.manager.pushRequest(req, retries=retries)
