@@ -355,7 +355,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return d
 
     def clear_job(self, x):
-        self.logstate('clear job %s (result %r)' % (self.jobphase, x))
+        self.logstate('clear job %s (result %r)', self.jobphase, x)
         self.jobphase = None
         self.job_d = None
         return x
@@ -444,8 +444,9 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         if self.jobphase != 'pending_request':
             self.stopFactory()
 
-    def logstate(self, msg):
+    def logstate(self, msg, *args):
         if getattr(self, 'debugging', False):
+            if msg and args: msg = msg % args
             log.msg('CPRF 0x%x (node %s) [%s]: %s'
                     % (id(self), self.node, self.jobphase, msg))
 
