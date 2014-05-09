@@ -56,6 +56,7 @@ class GeneralPoolTest(unittest.TestCase):
                     rpc_endpoints=["127.0.0.5", "0.0.0.0"])
         self.assertEqual(["127.0.0.5", "127.0.0.2"], get_endpoints_from_tokenrange(range08))
 
+
 class CassandraClusterPoolTest(unittest.TestCase):
     start_port = 44449
     ksname = 'TestKeyspace'
@@ -120,12 +121,12 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
-                         cluster_class=None):
+                         cluster_class=None, node_discovery=True):
         if cluster_class is None:
             cluster_class = FakeCassandraCluster
         cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
-                                    pool_size=pool_size)
+                                    pool_size=pool_size, auto_node_discovery=node_discovery)
         if start:
             cluster.startService()
             pool.startService()
@@ -851,6 +852,25 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
         self.assertApproximates(endtime - starttime, runtime, 0.5 * runtime)
         self.flushLoggedErrors()
+
+    @defer.inlineCallbacks
+    def test_auto_discovery_on(self):
+        num_nodes = 5
+        pool_size = 10
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1):
+            yield deferwait(0.5)
+            self.assertEqual(len(self.pool.nodes), 5)
+
+    @defer.inlineCallbacks
+    def test_auto_discovery_off(self):
+        num_nodes = 5
+        pool_size = 10
+
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=1, node_discovery=False):
+            yield deferwait(0.5)
+            self.assertEqual(len(self.pool.nodes), 1)
+
 
 if cassanova:
     class EnhancedCassanovaInterface(cassanova.CassanovaInterface):

@@ -259,7 +259,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             return
         self.connector.connect()
 
-    def prep_connection(self, creds=None, keyspace=None):
+    def prep_connection(self, creds=None, keyspace=None, node_auto_discovery=True):
         """
         Do login and set_keyspace tasks as necessary, and also check this
         node's idea of the Cassandra ring. Expects that our connection is
@@ -274,8 +274,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d.addCallback(lambda _: self.my_login(creds))
         if keyspace is not None:
             d.addCallback(lambda _: self.my_set_keyspace(keyspace))
+        if node_auto_discovery:
+            d.addCallback(lambda _: self.my_describe_ring(keyspace))
 
-        return d.addCallback(lambda _: self.my_describe_ring(keyspace))
+        return d
 
     # The following my_* methods are for internal use, to facilitate the
     # management of the pool and the queries we get. The user should make
@@ -662,7 +664,7 @@ class CassandraClusterPool(service.Service, object):
     def __init__(self, seed_list, keyspace=None, creds=None, thrift_port=None,
                  pool_size=None, conn_timeout=10, bind_address=None,
                  log_cb=log.msg, reactor=None, ssl_ctx_factory=None,
-                 sasl_cred_factory=None):
+                 sasl_cred_factory=None, auto_node_discovery=True):
         """
         Initialize a CassandraClusterPool.
 
@@ -715,6 +717,9 @@ class CassandraClusterPool(service.Service, object):
             arguments to be used for the L{puresasl.client.SASLClient}
             constructor. If supplied, the ThriftSASLClientProtocol will
             be used.
+
+        @param auto_node_discovery: Bool that Enables/Disables node
+            auto-discovery, defaults to True
         """
 
         self.seed_list = list(seed_list)
@@ -735,6 +740,7 @@ class CassandraClusterPool(service.Service, object):
         self.future_fill_pool = None
         self.removed_nodes = set()
         self._client_instance = CassandraClient(self)
+        self.auto_node_discovery = auto_node_discovery
 
         if reactor is None:
             from twisted.internet import reactor
@@ -1065,12 +1071,15 @@ class CassandraClusterPool(service.Service, object):
         self.fill_pool()
 
     def client_conn_made(self, f):
-        d = f.prep_connection(self.creds, self.keyspace)
+        d = f.prep_connection(self.creds, self.keyspace, self.auto_node_discovery)
         d.addCallback(self.client_ready, f)
         d.addErrback(self.client_conn_failed, f)
 
     def client_ready(self, ring, f):
-        self.update_known_nodes(ring)
+        # when auto_node_discovery is false, ring will not be populated
+        if ring:
+            self.update_known_nodes(ring)
+
         f.node.conn_success()
         self.good_conns.add(f)
         self.log('Successfully added connection to %s to the pool' % (f.node,))
