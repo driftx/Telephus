@@ -67,6 +67,8 @@ ConsistencyLevel = ttypes.ConsistencyLevel
 
 noop = lambda *a, **kw: None
 
+SYSTEM_KEYSPACES = ("system", "system_traces", "system_auth", "dse_auth")
+
 class NoKeyspacesAvailable(UserWarning):
     """
     Indicates CassandraClusterPool could not collect information about the
@@ -282,7 +284,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace in ("system", "system_traces", "system_auth"):
+        if keyspace is None or keyspace in SYSTEM_KEYSPACES:
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
@@ -310,7 +312,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
 
         def pick_non_system(klist):
             for k in klist:
-                if k.name not in ('system', 'system_traces', 'system_auth'):
+                if k.name not in SYSTEM_KEYSPACES:
                     return k.name
             err = NoKeyspacesAvailable("Can't gather information about the "
                                        "Cassandra ring; no non-system "
