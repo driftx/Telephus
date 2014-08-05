@@ -293,7 +293,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return f
 
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace in ("system", "system_traces", "system_auth"):
+        if keyspace is None or keyspace in SYSTEM_KEYSPACES:
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
