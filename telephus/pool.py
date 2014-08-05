@@ -175,9 +175,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service, sasl_cred_factory=None):
+    def __init__(self, node, service, sasl_cred_factory=None, describing_ring=False):
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
+        self.describing_ring = describing_ring
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
@@ -283,18 +284,35 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     def my_set_keyspace(self, keyspace):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
+    def done_describing(self, result):
+        self.describing_ring = False
+        return result
+
+    def done_describing_err(self, f):
+        self.describing_ring = False
+        return f
+
     def my_describe_ring(self, keyspace=None):
-        if keyspace is None or keyspace in SYSTEM_KEYSPACES:
+        if keyspace is None or keyspace in ("system", "system_traces", "system_auth"):
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
-        d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
 
-        def suppress_no_keyspaces_error(f):
-            f.trap(NoKeyspacesAvailable)
-            return ()
+        if not self.describing_ring:
+            self.describing_ring = d
+            d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
 
-        d.addErrback(suppress_no_keyspaces_error)
+            def suppress_no_keyspaces_error(f):
+                f.trap(NoKeyspacesAvailable)
+                return ()
+
+            d.addCallback(self.done_describing)
+            d.addErrback(self.done_describing_err)
+            d.addErrback(suppress_no_keyspaces_error)
+
+        else:
+            d = self.describing_ring
+
         return d
 
     def my_describe_version(self):
@@ -707,6 +725,7 @@ class CassandraClusterPool(service.Service, object):
         being called too fast in a failure situation
         """
 
+        self.describing_ring = False
         self.seed_list = list(seed_list)
         if thrift_port is None:
             thrift_port = self.default_cassandra_thrift_port
@@ -1026,7 +1045,7 @@ class CassandraClusterPool(service.Service, object):
 
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self, self.sasl_cred_factory)
+        f = self.conn_factory(node, self, self.sasl_cred_factory, self.describing_ring)
         bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
