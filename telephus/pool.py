@@ -175,10 +175,12 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service, sasl_cred_factory=None, describing_ring=False):
+    def __init__(self, node, service, sasl_cred_factory=None, describe_lock=None):
+        if not describe_lock:
+            raise ValueError("Expected describe_lock, got None.")
+        self.describe_lock = describe_lock
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
-        self.describing_ring = describing_ring
         self.service = service
         self.my_proto = None
         self.job_d = self.jobphase = None
@@ -285,11 +287,11 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
     def done_describing(self, result):
-        self.describing_ring = False
+        self.describe_lock.release_lock()
         return result
 
     def done_describing_err(self, f):
-        self.describing_ring = False
+        self.describe_lock.release_lock()
         return f
 
     def my_describe_ring(self, keyspace=None):
@@ -298,8 +300,8 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
         else:
             d = defer.succeed(keyspace)
 
-        if not self.describing_ring:
-            self.describing_ring = d
+        if not self.describe_lock.get_lock():
+            self.describe_lock.set_lock(d)
             d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
 
             def suppress_no_keyspaces_error(f):
@@ -311,7 +313,7 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
             d.addErrback(suppress_no_keyspaces_error)
 
         else:
-            d = self.describing_ring
+            d = self.describe_lock.get_lock()
 
         return d
 
@@ -1043,9 +1045,18 @@ class CassandraClusterPool(service.Service, object):
         else:
             self.future_fill_pool.reset(seconds)
 
+    def set_lock(self, d):
+        self.describing_ring = d
+
+    def get_lock(self):
+        return self.describing_ring
+
+    def release_lock(self):
+        self.describing_ring = False
+
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self, self.sasl_cred_factory, self.describing_ring)
+        f = self.conn_factory(node, self, self.sasl_cred_factory, self)
         bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
