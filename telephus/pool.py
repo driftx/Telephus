@@ -1046,12 +1046,18 @@ class CassandraClusterPool(service.Service, object):
             self.future_fill_pool.reset(seconds)
 
     def set_lock(self, d):
+        """"Accepts a deferred, when set any calls to get_lock will return this deferred.  Used with describe_ring to
+         ensure that only one call to describe ring is active at a time, and other calls simply share the same
+         result."""
         self.describing_ring = d
 
     def get_lock(self):
+        """"Returns either False if the lock is not set, or a deferred that was specified in set_lock."""
         return self.describing_ring
 
     def release_lock(self):
+        """"When calls to describe_ring finish, the lock is set back to false so future calls can get new results from
+        describe ring."""
         self.describing_ring = False
 
     def make_conn(self, node):
