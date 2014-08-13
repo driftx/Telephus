@@ -121,12 +121,13 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
     @contextlib.contextmanager
     def cluster_and_pool(self, num_nodes=10, pool_size=5, start=True,
-                         cluster_class=None, node_discovery=True):
+                         cluster_class=None, node_discovery=True, fill_throttle=0.0):
         if cluster_class is None:
             cluster_class = FakeCassandraCluster
         cluster = cluster_class(num_nodes, start_port=self.start_port)
         pool = CassandraClusterPool([cluster.iface], thrift_port=self.start_port,
-                                    pool_size=pool_size, auto_node_discovery=node_discovery)
+                                    pool_size=pool_size, auto_node_discovery=node_discovery,
+                                    fill_pool_throttle=fill_throttle)
         if start:
             cluster.startService()
             pool.startService()
@@ -384,11 +385,10 @@ class CassandraClusterPoolTest(unittest.TestCase):
 
             # turn up pool size once other nodes are known
             self.pool.adjustPoolSize(pool_size)
-            yield deferwait(0.1)
+            yield deferwait(.1)
 
             self.assertNumConnections(pool_size)
             self.assertNumUniqueConnections(pool_size)
-
             dlist = []
             for x in range(pool_size):
                 d = self.pool.get('key001', 'Standard1/wait=1.0',
@@ -871,6 +871,32 @@ class CassandraClusterPoolTest(unittest.TestCase):
             yield deferwait(0.5)
             self.assertEqual(len(self.pool.nodes), 1)
 
+    def test_describe_ring_not_locked_after_creation(self):
+        num_nodes = 5
+        pool_size = 10
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=pool_size):
+            self.assertFalse(self.pool.describing_ring)
+
+    def test_describe_errors_unlock_describe_ring(self):
+        num_nodes = 5
+        pool_size = 10
+        with self.cluster_and_pool(num_nodes=num_nodes, pool_size=pool_size):
+            conn = list(self.pool.connectors)[0]
+
+            def exec_raises(x, y=None):
+                import time
+                time.sleep(1)
+                raise ValueError("Bad things.")
+
+            try:
+                conn.execute = exec_raises
+                x = conn.my_describe_ring()
+                self.assertTrue(self.pool.describing_ring)
+                yield x
+                self.assertTrue(False, "Expected exception.")
+            except ValueError, e:
+                self.assertFalse(self.pool.describing_ring)
+
 
 if cassanova:
     class EnhancedCassanovaInterface(cassanova.CassanovaInterface):
@@ -946,4 +972,4 @@ if cassanova:
                     d.addErrback(lambda n: None)
 
 if not cassanova:
-    del CassandraClusterPoolTest
+    raise AssertionError("Cassanova is required to run all tests")

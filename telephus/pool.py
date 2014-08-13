@@ -175,7 +175,10 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     # requests still get made in their right keyspaces).
     keyspace = None
 
-    def __init__(self, node, service, sasl_cred_factory=None):
+    def __init__(self, node, service, sasl_cred_factory=None, describe_lock=None):
+        if not describe_lock:
+            raise ValueError("Expected describe_lock, got None.")
+        self.describe_lock = describe_lock
         self.node = node
         # if self.service is None, don't bother doing anything. nobody loves us.
         self.service = service
@@ -283,18 +286,35 @@ class CassandraPoolReconnectorFactory(protocol.ClientFactory):
     def my_set_keyspace(self, keyspace):
         return self.execute(ManagedThriftRequest('set_keyspace', keyspace))
 
+    def done_describing(self, result):
+        self.describe_lock.release_lock()
+        return result
+
+    def done_describing_err(self, f):
+        self.describe_lock.release_lock()
+        return f
+
     def my_describe_ring(self, keyspace=None):
         if keyspace is None or keyspace in SYSTEM_KEYSPACES:
             d = self.my_pick_non_system_keyspace()
         else:
             d = defer.succeed(keyspace)
-        d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
 
-        def suppress_no_keyspaces_error(f):
-            f.trap(NoKeyspacesAvailable)
-            return ()
+        if not self.describe_lock.get_lock():
+            self.describe_lock.set_lock(d)
+            d.addCallback(lambda k: self.execute(ManagedThriftRequest('describe_ring', k)))
 
-        d.addErrback(suppress_no_keyspaces_error)
+            def suppress_no_keyspaces_error(f):
+                f.trap(NoKeyspacesAvailable)
+                return ()
+
+            d.addCallback(self.done_describing)
+            d.addErrback(self.done_describing_err)
+            d.addErrback(suppress_no_keyspaces_error)
+
+        else:
+            d = self.describe_lock.get_lock()
+
         return d
 
     def my_describe_version(self):
@@ -707,6 +727,7 @@ class CassandraClusterPool(service.Service, object):
         being called too fast in a failure situation
         """
 
+        self.describing_ring = False
         self.seed_list = list(seed_list)
         if thrift_port is None:
             thrift_port = self.default_cassandra_thrift_port
@@ -1024,9 +1045,24 @@ class CassandraClusterPool(service.Service, object):
         else:
             self.future_fill_pool.reset(seconds)
 
+    def set_lock(self, d):
+        """"Accepts a deferred, when set any calls to get_lock will return this deferred.  Used with describe_ring to
+         ensure that only one call to describe ring is active at a time, and other calls simply share the same
+         result."""
+        self.describing_ring = d
+
+    def get_lock(self):
+        """"Returns either False if the lock is not set, or a deferred that was specified in set_lock."""
+        return self.describing_ring
+
+    def release_lock(self):
+        """"When calls to describe_ring finish, the lock is set back to false so future calls can get new results from
+        describe ring."""
+        self.describing_ring = False
+
     def make_conn(self, node):
         self.log('Adding connection to %s' % (node,))
-        f = self.conn_factory(node, self, self.sasl_cred_factory)
+        f = self.conn_factory(node, self, self.sasl_cred_factory, self)
         bindaddr = self.bind_address
         if bindaddr is not None and isinstance(bindaddr, str):
             bindaddr = (bindaddr, 0)
