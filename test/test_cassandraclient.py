@@ -305,6 +305,29 @@ class CassandraClientTest(unittest.TestCase):
         self.assertEqual(get_rf(ks1), get_rf(ks2))
         self.assertEqual(strat_opts_no_rf(ks1), strat_opts_no_rf(ks2))
 
+    def compare_keyspaces(self, ks1, ks2):
+        self.assertEqual(ks1.name, ks2.name)
+        self.assertEqual(ks1.strategy_class, ks2.strategy_class)
+        self.assertEqual(ks1.cf_defs, ks2.cf_defs)
+
+        def get_rf(ksdef):
+            rf = ksdef.replication_factor
+            if ksdef.strategy_options and \
+               'replication_factor' in ksdef.strategy_options:
+                rf = int(ksdef.strategy_options['replication_factor'])
+            return rf
+
+        def strat_opts_no_rf(ksdef):
+            if not ksdef.strategy_options:
+                return {}
+            opts = ksdef.strategy_options.copy()
+            if 'replication_factor' in ksdef.strategy_options:
+                del opts['replication_factor']
+            return opts
+
+        self.assertEqual(get_rf(ks1), get_rf(ks2))
+        self.assertEqual(strat_opts_no_rf(ks1), strat_opts_no_rf(ks2))
+
     @defer.inlineCallbacks
     def test_keyspace_manipulation(self):
         try:
