@@ -213,7 +213,7 @@ class Iface(Interface):
     """
     Truncate will mark and entire column family as deleted.
     From the user's perspective a successful call to truncate will result complete data deletion from cfname.
-    Internally, however, disk space will not be immediatily released, as with all deletes in cassandra, this one
+    Internally, however, disk space will not be immediately released, as with all deletes in cassandra, this one
     only marks the data as deleted.
     The operation succeeds only if all hosts in the cluster at available and will throw an UnavailableException if
     some hosts are down.
@@ -313,7 +313,7 @@ class Iface(Interface):
   def trace_next_query():
     """
     Enables tracing for the next query in this connection and returns the UUID for that trace session
-    The next query will be traced idependently of trace probability and the returned UUID can be used to query the trace keyspace
+    The next query will be traced independently of trace probability and the returned UUID can be used to query the trace keyspace
     """
     pass
 
@@ -1183,7 +1183,7 @@ class Client:
     """
     Truncate will mark and entire column family as deleted.
     From the user's perspective a successful call to truncate will result complete data deletion from cfname.
-    Internally, however, disk space will not be immediatily released, as with all deletes in cassandra, this one
+    Internally, however, disk space will not be immediately released, as with all deletes in cassandra, this one
     only marks the data as deleted.
     The operation succeeds only if all hosts in the cluster at available and will throw an UnavailableException if
     some hosts are down.
@@ -1583,7 +1583,7 @@ class Client:
   def trace_next_query(self, ):
     """
     Enables tracing for the next query in this connection and returns the UUID for that trace session
-    The next query will be traced idependently of trace probability and the returned UUID can be used to query the trace keyspace
+    The next query will be traced independently of trace probability and the returned UUID can be used to query the trace keyspace
     """
     self._seqid += 1
     d = self._reqs[self._seqid] = defer.Deferred()
